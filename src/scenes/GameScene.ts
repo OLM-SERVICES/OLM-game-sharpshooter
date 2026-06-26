@@ -2,29 +2,18 @@ import { CasinoBridge } from '../bridge'
 import type { BetResult } from '../bridge'
 
 export class GameScene extends Phaser.Scene {
-  private selectedPick: 'HIGH' | 'LOW' | null = null
-  private currentStake: number = 500
   private isPlacing: boolean = false
   private balance: number = 0
   private isAuthenticated: boolean = false
   private bridge!: CasinoBridge
+  private selectedPick: 'HIGH' | 'LOW' | null = null
+  private currentStake: number = 500
 
-  private lowBtn!: Phaser.GameObjects.Graphics
-  private highBtn!: Phaser.GameObjects.Graphics
-  private lowBtnHit!: Phaser.GameObjects.Rectangle
-  private highBtnHit!: Phaser.GameObjects.Rectangle
-  private lowBtnText!: Phaser.GameObjects.Text
-  private lowBtnSub!: Phaser.GameObjects.Text
-  private highBtnText!: Phaser.GameObjects.Text
-  private highBtnSub!: Phaser.GameObjects.Text
   private numberDisplay!: Phaser.GameObjects.Text
   private playBtn!: Phaser.GameObjects.Graphics
   private playBtnHit!: Phaser.GameObjects.Rectangle
   private playBtnText!: Phaser.GameObjects.Text
   private balanceText!: Phaser.GameObjects.Text
-  private stakeTexts!: Phaser.GameObjects.Text[]
-  private stakeRects!: Phaser.GameObjects.Graphics[]
-  private stakeHits!: Phaser.GameObjects.Rectangle[]
   private overlay!: Phaser.GameObjects.Graphics
   private overlayText!: Phaser.GameObjects.Text
   private overlaySubText!: Phaser.GameObjects.Text
@@ -104,58 +93,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: '10px', color: '#555555'
     }).setOrigin(0.5)
 
-    // Buttons
-    const btnY = H * 0.63
-    const btnW = Math.min(W * 0.36, 140)
-    const btnH = 72
-    const gap = W * 0.12
-
-    this.lowBtn = this.add.graphics()
-    this.drawBtn(this.lowBtn, cx - gap - btnW / 2, btnY, btnW, btnH, '#0D0A2E', '#4B6EF5', 2)
-    this.lowBtnHit = this.add.rectangle(cx - gap - btnW / 2, btnY, btnW, btnH)
-      .setInteractive({ useHandCursor: true })
-    this.lowBtnText = this.add.text(cx - gap - btnW / 2, btnY - 12, 'LOW', {
-      fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
-    }).setOrigin(0.5)
-    this.lowBtnSub = this.add.text(cx - gap - btnW / 2, btnY + 14, '1 - 5', {
-      fontSize: '12px', color: '#4B6EF5'
-    }).setOrigin(0.5)
-
-    this.highBtn = this.add.graphics()
-    this.drawBtn(this.highBtn, cx + gap + btnW / 2, btnY, btnW, btnH, '#2E0A0A', '#FF3A2D', 2)
-    this.highBtnHit = this.add.rectangle(cx + gap + btnW / 2, btnY, btnW, btnH)
-      .setInteractive({ useHandCursor: true })
-    this.highBtnText = this.add.text(cx + gap + btnW / 2, btnY - 12, 'HIGH', {
-      fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
-    }).setOrigin(0.5)
-    this.highBtnSub = this.add.text(cx + gap + btnW / 2, btnY + 14, '6 - 10', {
-      fontSize: '12px', color: '#FF3A2D'
-    }).setOrigin(0.5)
-
-    // Stake selector
-    const stakes = [100, 500, 1000, 5000]
-    this.stakeRects = []
-    this.stakeTexts = []
-    this.stakeHits = []
-    const stakeW = Math.min((W - 48) / 4 - 8, 80)
-    const stakeStartX = cx - (stakeW * 1.5 + 12)
-    stakes.forEach((amount, i) => {
-      const x = stakeStartX + i * (stakeW + 8)
-      const y = H * 0.775
-      const rect = this.add.graphics()
-      this.drawPill(rect, x, y, stakeW, 34, '#0D0A2E', '#2a2060', 1)
-      const hit = this.add.rectangle(x, y, stakeW, 34).setInteractive({ useHandCursor: true })
-      const txt = this.add.text(x, y, '₦' + (amount >= 1000 ? amount / 1000 + 'k' : amount), {
-        fontSize: '12px', color: '#666666'
-      }).setOrigin(0.5)
-      hit.on('pointerdown', () => {
-        this.currentStake = amount
-        this.updateStakeUI()
-      })
-      this.stakeRects.push(rect)
-      this.stakeTexts.push(txt)
-      this.stakeHits.push(hit)
-    })
+    // Stake and pick will be received via postMessage
 
     // Play button
     const playW = W - 48
@@ -197,12 +135,19 @@ export class GameScene extends Phaser.Scene {
     }).setDepth(12)
 
     // Events
-    this.lowBtnHit.on('pointerdown', () => this.selectPick('LOW'))
-    this.highBtnHit.on('pointerdown', () => this.selectPick('HIGH'))
     this.playBtnHit.on('pointerdown', () => this.handlePlay())
     this.scale.on('resize', () => { this.scene.restart() })
 
-    this.updateStakeUI()
+    // Listen for stake/pick messages from parent
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'SET_STAKE') {
+        this.currentStake = event.data.stake
+      } else if (event.data.type === 'SET_PICK') {
+        this.selectedPick = event.data.pick
+      }
+    })
+
+    this.updatePlayButton()
   }
 
   private drawGrid(W: number, H: number) {
@@ -260,21 +205,6 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(2)
   }
 
-  private drawBtn(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, fill: string, border: string, bw: number) {
-    g.clear()
-    g.fillStyle(parseInt(fill.replace('#', ''), 16), 1)
-    g.lineStyle(bw, parseInt(border.replace('#', ''), 16), 1)
-    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 10)
-    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 10)
-  }
-
-  private drawPill(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, fill: string, border: string, bw: number) {
-    g.clear()
-    g.fillStyle(parseInt(fill.replace('#', ''), 16), 1)
-    g.lineStyle(bw, parseInt(border.replace('#', ''), 16), 1)
-    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, h / 2)
-    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, h / 2)
-  }
 
   private drawRoundedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, r: number, fill: string, border: string, bw: number) {
     g.clear()
@@ -375,25 +305,10 @@ export class GameScene extends Phaser.Scene {
       this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
       this.selectedPick = null
       this.isPlacing = false
-      this.redrawButtons()
       this.updatePlayButton()
     })
   }
 
-  private redrawButtons() {
-    const W = this.scale.width
-    const H = this.scale.height
-    const cx = W / 2
-    const btnY = H * 0.63
-    const btnW = Math.min(W * 0.36, 140)
-    const gap = W * 0.12
-    this.drawBtn(this.lowBtn, cx - gap - btnW / 2, btnY, btnW, 72, '#0D0A2E', '#4B6EF5', 2)
-    this.drawBtn(this.highBtn, cx + gap + btnW / 2, btnY, btnW, 72, '#2E0A0A', '#FF3A2D', 2)
-    this.lowBtnText.setColor('#ffffff')
-    this.highBtnText.setColor('#ffffff')
-    this.lowBtnSub.setColor('#4B6EF5')
-    this.highBtnSub.setColor('#FF3A2D')
-  }
 
   private showError(message: string) {
     const cx = this.scale.width / 2
@@ -402,42 +317,6 @@ export class GameScene extends Phaser.Scene {
       backgroundColor: '#1a0000', padding: { x: 12, y: 8 }
     }).setOrigin(0.5).setDepth(20)
     this.time.delayedCall(3000, () => err.destroy())
-  }
-
-  private selectPick(pick: 'HIGH' | 'LOW') {
-    this.selectedPick = pick
-    const W = this.scale.width
-    const H = this.scale.height
-    const cx = W / 2
-    const btnY = H * 0.63
-    const btnW = Math.min(W * 0.36, 140)
-    const gap = W * 0.12
-    this.drawBtn(this.lowBtn, cx - gap - btnW / 2, btnY, btnW, 72,
-      pick === 'LOW' ? '#1a1060' : '#0D0A2E', '#4B6EF5', pick === 'LOW' ? 3 : 2)
-    this.drawBtn(this.highBtn, cx + gap + btnW / 2, btnY, btnW, 72,
-      pick === 'HIGH' ? '#3d0a0a' : '#2E0A0A', '#FF3A2D', pick === 'HIGH' ? 3 : 2)
-    this.lowBtnText.setColor(pick === 'LOW' ? '#4B6EF5' : '#ffffff')
-    this.highBtnText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
-    this.updatePlayButton()
-  }
-
-  private updateStakeUI() {
-    const stakes = [100, 500, 1000, 5000]
-    const W = this.scale.width
-    const cx = W / 2
-    const H = this.scale.height
-    const stakeW = Math.min((W - 48) / 4 - 8, 80)
-    const stakeStartX = cx - (stakeW * 1.5 + 12)
-    stakes.forEach((amount, i) => {
-      const x = stakeStartX + i * (stakeW + 8)
-      const y = H * 0.775
-      const sel = this.currentStake === amount
-      this.drawPill(this.stakeRects[i], x, y, stakeW, 34,
-        sel ? '#1a1060' : '#0D0A2E',
-        sel ? '#4B6EF5' : '#2a2060', 1)
-      this.stakeTexts[i].setColor(sel ? '#ffffff' : '#666666')
-    })
-    this.updatePlayButton()
   }
 
   private updatePlayButton() {
