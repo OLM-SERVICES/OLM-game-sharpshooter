@@ -177,26 +177,34 @@ export class GameScene extends Phaser.Scene {
       fontSize: '22px', color: '#ffffff'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
 
-    // Custom dart graphic
+    // Custom dart graphic (triangle shape with tail)
     this.dartSprite = this.add.graphics()
+      .fillStyle(0xFF3A2D, 1)
+      .fillTriangle(-8, -40, 8, -40, 0, -60)  // Dart head
       .fillStyle(0x00F0FF, 1)
-      .fillRect(-16, -40, 32, 80)
+      .fillRect(-2, -40, 4, 30)  // Dart tail
       .setPosition(cx, -60)
       .setVisible(false)
       .setDepth(6)
       .setAngle(180)
 
-    // Custom particle emitter (pre-create, fire on win)
+    // Custom particle emitter (more vibrant confetti)
     this.particles = this.add.particles(0, 0, undefined, {
-      speed: { min: 100, max: 280 },
+      speed: { min: 150, max: 350 },
       angle: { min: 0, max: 360 },
-      scale: { start: 0.6, end: 0 },
+      scale: { start: 0.8, end: 0 },
       alpha: { start: 1, end: 0 },
-      lifespan: 1000,
-      quantity: 30,
+      lifespan: 1200,
+      quantity: 50,
       emitting: false,
-      blendMode: 'ADD',
-      tint: { start: 0xFFFFFF, end: Phaser.Display.Color.RandomRGB().color }
+      blendMode: 'SCREEN',
+      tint: [
+        0xFF0000, 0x00FF00, 0x0000FF, 
+        0xFFFF00, 0xFF00FF, 0x00FFFF,
+        0xFFD700, 0x4B6EF5, 0xFF3A2D
+      ],
+      rotate: { start: 0, end: 360 },
+      gravityY: 200
     }).setDepth(12)
 
     // Events
