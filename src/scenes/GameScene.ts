@@ -171,7 +171,7 @@ export class GameScene extends Phaser.Scene {
     
     // Animate number rolling
     let count = 0
-    const timer = this.time.addEvent({
+    this.time.addEvent({
       delay: 80,
       repeat: 12,
       callback: () => {
