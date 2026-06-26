@@ -28,7 +28,7 @@ export class GameScene extends Phaser.Scene {
   private overlay!: Phaser.GameObjects.Graphics
   private overlayText!: Phaser.GameObjects.Text
   private overlaySubText!: Phaser.GameObjects.Text
-  private dartSprite!: Phaser.GameObjects.Image
+  private dartSprite!: Phaser.GameObjects.Graphics
   private crosshairContainer!: Phaser.GameObjects.Container
   private bullseye!: Phaser.GameObjects.Graphics
   private dartboardCX!: number
@@ -40,8 +40,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('dart', '/dart.png')
-    this.load.image('confetti', '/confetti.png')
+    // Custom animations will be created programmatically
   }
 
   create() {
@@ -178,15 +177,17 @@ export class GameScene extends Phaser.Scene {
       fontSize: '22px', color: '#ffffff'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
 
-    // Dart sprite
-    this.dartSprite = this.add.image(cx, -60, 'dart')
-      .setDisplaySize(32, 80)
-      .setAngle(180)
+    // Custom dart graphic
+    this.dartSprite = this.add.graphics()
+      .fillStyle(0x00F0FF, 1)
+      .fillRect(-16, -40, 32, 80)
+      .setPosition(cx, -60)
       .setVisible(false)
       .setDepth(6)
+      .setAngle(180)
 
-    // Particle emitter (pre-create, fire on win)
-    this.particles = this.add.particles(0, 0, 'confetti', {
+    // Custom particle emitter (pre-create, fire on win)
+    this.particles = this.add.particles(0, 0, undefined, {
       speed: { min: 100, max: 280 },
       angle: { min: 0, max: 360 },
       scale: { start: 0.6, end: 0 },
@@ -194,6 +195,8 @@ export class GameScene extends Phaser.Scene {
       lifespan: 1000,
       quantity: 30,
       emitting: false,
+      blendMode: 'ADD',
+      tint: { start: 0xFFFFFF, end: Phaser.Display.Color.RandomRGB().color }
     }).setDepth(12)
 
     // Events
