@@ -28,7 +28,6 @@ export class GameScene extends Phaser.Scene {
   private overlay!: Phaser.GameObjects.Graphics
   private overlayText!: Phaser.GameObjects.Text
   private overlaySubText!: Phaser.GameObjects.Text
-  private dartSprite!: Phaser.GameObjects.Graphics
   private crosshairContainer!: Phaser.GameObjects.Container
   private bullseye!: Phaser.GameObjects.Graphics
   private dartboardCX!: number
@@ -177,16 +176,6 @@ export class GameScene extends Phaser.Scene {
       fontSize: '22px', color: '#ffffff'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
 
-    // Custom dart graphic (triangle shape with tail)
-    this.dartSprite = this.add.graphics()
-      .fillStyle(0xFF3A2D, 1)
-      .fillTriangle(-8, -40, 8, -40, 0, -60)  // Dart head
-      .fillStyle(0x00F0FF, 1)
-      .fillRect(-2, -40, 4, 30)  // Dart tail
-      .setPosition(cx, -60)
-      .setVisible(false)
-      .setDepth(6)
-      .setAngle(180)
 
     // Custom particle emitter (more vibrant confetti)
     this.particles = this.add.particles(0, 0, undefined, {
@@ -318,14 +307,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private animateDartThrow() {
-    const cx = this.scale.width / 2
-    this.dartSprite.setPosition(cx, -60).setVisible(true)
-    this.tweens.add({
-      targets: this.dartSprite,
-      y: this.dartboardCY - 10,
-      duration: 380,
-      ease: 'Power3',
-    })
+    // Dart animation removed
   }
 
   private handleResult(result: BetResult) {
@@ -342,17 +324,6 @@ export class GameScene extends Phaser.Scene {
         count++
         if (count >= 14) {
           this.numberDisplay.setText(String(roll))
-
-          // Fly dart away
-          this.time.delayedCall(700, () => {
-            this.tweens.add({
-              targets: this.dartSprite,
-              y: this.scale.height + 60,
-              duration: 280,
-              ease: 'Power2',
-              onComplete: () => this.dartSprite.setVisible(false)
-            })
-          })
 
           if (result.win) {
             this.numberDisplay.setColor('#00E676')
