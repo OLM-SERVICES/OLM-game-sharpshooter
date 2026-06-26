@@ -31,7 +31,6 @@ export class GameScene extends Phaser.Scene {
   private spotlight!: Phaser.GameObjects.Graphics
 
   // Glitch title
-  private titleMain!: Phaser.GameObjects.Text
   private titleGlitch1!: Phaser.GameObjects.Text
   private titleGlitch2!: Phaser.GameObjects.Text
   private glitchTimer: number = 0
@@ -162,9 +161,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ── Spotlight beam behind dartboard (Reactbits Spotlight) ─────────────────
-  private drawSpotlight(cx: number, cy: number, W: number) {
+  private drawSpotlight(cx: number, cy: number, _W: number) {
     this.spotlight.clear()
-    // Radial glow — multiple circles fading outward
     const colors = [
       { r: 20,  alpha: 0.25, color: 0x00F0FF },
       { r: 50,  alpha: 0.12, color: 0x4B6EF5 },
@@ -192,7 +190,7 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
 
     // Main title on top
-    this.titleMain = this.add.text(cx, y, 'SHARP SHOOTER', style)
+    this.add.text(cx, y, 'SHARP SHOOTER', style)
       .setOrigin(0.5).setDepth(2)
   }
 
@@ -205,37 +203,45 @@ export class GameScene extends Phaser.Scene {
     const leftX = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
 
+    // LOW button
     this.lowGfx = this.add.graphics()
     this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, false, 'LOW')
+    this.lowGfx.setInteractive(
+      new Phaser.Geom.Rectangle(leftX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
+      Phaser.Geom.Rectangle.Contains
+    )
+    this.lowGfx.on('pointerdown', () => {
+      this.currentPick = 'LOW'
+      this.highlightPick('LOW')
+      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN)
+    })
+
     this.lowText = this.add.text(leftX, this.btnY - 10, 'LOW', {
       fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5)
     this.lowSub = this.add.text(leftX, this.btnY + 13, '1 - 5', {
       fontSize: '12px', color: '#4B6EF5'
     }).setOrigin(0.5)
-    const lowHit = this.add.rectangle(leftX, this.btnY, this.btnW, 64)
-      .setInteractive({ useHandCursor: true })
-    lowHit.on('pointerdown', () => {
-      this.currentPick = 'LOW'
-      this.highlightPick('LOW')
-      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN)
-    })
 
+    // HIGH button
     this.highGfx = this.add.graphics()
     this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
+    this.highGfx.setInteractive(
+      new Phaser.Geom.Rectangle(rightX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
+      Phaser.Geom.Rectangle.Contains
+    )
+    this.highGfx.on('pointerdown', () => {
+      this.currentPick = 'HIGH'
+      this.highlightPick('HIGH')
+      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN)
+    })
+
     this.highText = this.add.text(rightX, this.btnY - 10, 'HIGH', {
       fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5)
     this.highSub = this.add.text(rightX, this.btnY + 13, '6 - 10', {
       fontSize: '12px', color: '#FF3A2D'
     }).setOrigin(0.5)
-    const highHit = this.add.rectangle(rightX, this.btnY, this.btnW, 64)
-      .setInteractive({ useHandCursor: true })
-    highHit.on('pointerdown', () => {
-      this.currentPick = 'HIGH'
-      this.highlightPick('HIGH')
-      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN)
-    })
   }
 
   private drawPickBtn(
@@ -259,7 +265,6 @@ export class GameScene extends Phaser.Scene {
     if (selected) {
       g.fillStyle(borderColor, 0.08)
       g.fillRoundedRect(x - w / 2 + 4, y - h / 2 + 4, w - 8, h - 8, 9)
-      // Glow line at top of selected button
       g.lineStyle(1, borderColor, 0.6)
       g.lineBetween(x - w / 2 + 12, y - h / 2 + 2, x + w / 2 - 12, y - h / 2 + 2)
     }
@@ -268,8 +273,20 @@ export class GameScene extends Phaser.Scene {
   private highlightPick(pick: 'HIGH' | 'LOW') {
     const leftX = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
+
     this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, pick === 'LOW', 'LOW')
     this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, pick === 'HIGH', 'HIGH')
+
+    // Re-apply hit areas after redraw (clear() wipes interactivity)
+    this.lowGfx.setInteractive(
+      new Phaser.Geom.Rectangle(leftX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
+      Phaser.Geom.Rectangle.Contains
+    )
+    this.highGfx.setInteractive(
+      new Phaser.Geom.Rectangle(rightX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
+      Phaser.Geom.Rectangle.Contains
+    )
+
     this.lowText.setColor(pick === 'LOW' ? '#4B6EF5' : '#ffffff')
     this.highText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
     this.lowSub.setColor(pick === 'LOW' ? '#ffffff' : '#4B6EF5')
@@ -366,7 +383,6 @@ export class GameScene extends Phaser.Scene {
             this.bullseye.fillStyle(0x00E676, 1)
             this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
             this.tweens.add({ targets: this.numberDisplay, scale: 1.4, duration: 150, yoyo: true })
-            // Redraw spotlight in green on win
             this.spotlight.clear()
             const winColors = [
               { r: 20,  alpha: 0.30, color: 0x00E676 },
@@ -403,7 +419,6 @@ export class GameScene extends Phaser.Scene {
       .setVisible(true)
       .setScale(0.5)
 
-    // Reactbits-style scale-in animation
     this.tweens.add({
       targets: this.overlayText,
       scale: 1,
@@ -424,7 +439,6 @@ export class GameScene extends Phaser.Scene {
     })
 
     if (result.win) {
-      // Burst particles from center (Reactbits Particles effect)
       for (let i = 0; i < 28; i++) {
         const p = this.add.graphics().setDepth(12)
         const colors = [0xFFD700, 0x00F0FF, 0x00E676, 0xFFFFFF, 0xFF3A2D]
@@ -448,7 +462,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.time.delayedCall(result.win ? 2600 : 2000, () => {
-      // Fade out overlay
       this.tweens.add({
         targets: [this.overlay, this.overlayText, this.overlaySubText],
         alpha: 0,
@@ -461,18 +474,30 @@ export class GameScene extends Phaser.Scene {
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFF3A2D, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-          // Reset spotlight
           this.drawSpotlight(this.dartboardCX, this.dartboardCY, this.scale.width)
           this.isPlacing = false
           this.currentPick = null
+
           const leftX = this.cx - this.btnGap - this.btnW / 2
           const rightX = this.cx + this.btnGap + this.btnW / 2
           this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, false, 'LOW')
           this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
+
+          // Re-apply hit areas after reset redraw
+          this.lowGfx.setInteractive(
+            new Phaser.Geom.Rectangle(leftX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
+            Phaser.Geom.Rectangle.Contains
+          )
+          this.highGfx.setInteractive(
+            new Phaser.Geom.Rectangle(rightX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
+            Phaser.Geom.Rectangle.Contains
+          )
+
           this.lowText.setColor('#ffffff')
           this.highText.setColor('#ffffff')
           this.lowSub.setColor('#4B6EF5')
           this.highSub.setColor('#FF3A2D')
+
           window.parent.postMessage({
             type: 'BET_DONE',
             payload: { newBalance: this.currentBalance }
@@ -491,13 +516,13 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(3000, () => err.destroy())
   }
 
-  update(time: number, delta: number) {
+  update(_time: number, delta: number) {
     // Rotating crosshair
     if (this.crosshairContainer) {
       this.crosshairContainer.rotation += 0.003
     }
 
-    // Animated aurora blobs (slow drift like Reactbits Aurora)
+    // Animated aurora blobs
     this.auroraTime += delta * 0.0004
     const W = this.scale.width
     const H = this.scale.height
@@ -516,7 +541,7 @@ export class GameScene extends Phaser.Scene {
       W * 0.7, H * 0.4
     )
 
-    // Glitch effect on title (fires randomly)
+    // Glitch effect on title
     this.glitchTimer += delta
     if (this.glitchTimer > 3000 + Math.random() * 4000) {
       this.glitchTimer = 0
@@ -525,7 +550,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private triggerGlitch() {
-    // Flash red and cyan offset copies briefly
     this.titleGlitch1.setAlpha(0.7).setX(this.cx - 3)
     this.titleGlitch2.setAlpha(0.7).setX(this.cx + 3)
     this.time.delayedCall(60, () => {
