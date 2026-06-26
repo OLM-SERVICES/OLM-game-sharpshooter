@@ -5,13 +5,21 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: window.innerWidth,
   height: window.innerHeight,
-  backgroundColor: '#0d1117',
+  backgroundColor: '#05001A',
   parent: 'game-container',
   scene: [GameScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
+  render: {
+    antialias: true,
+    antialiasGL: true,
+    pixelArt: false,
+    roundPixels: false,
+  },
 }
 
-new Phaser.Game(config)
+// Apply device pixel ratio after creation for crisp rendering
+const game = new Phaser.Game(config)
+game.scale.setZoom(window.devicePixelRatio || 1)
