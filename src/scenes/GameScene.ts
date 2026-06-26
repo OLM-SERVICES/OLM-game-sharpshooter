@@ -11,27 +11,37 @@ export class GameScene extends Phaser.Scene {
 
   private lowBtn!: Phaser.GameObjects.Graphics
   private highBtn!: Phaser.GameObjects.Graphics
+  private lowBtnHit!: Phaser.GameObjects.Rectangle
+  private highBtnHit!: Phaser.GameObjects.Rectangle
   private lowBtnText!: Phaser.GameObjects.Text
+  private lowBtnSub!: Phaser.GameObjects.Text
   private highBtnText!: Phaser.GameObjects.Text
+  private highBtnSub!: Phaser.GameObjects.Text
   private numberDisplay!: Phaser.GameObjects.Text
   private playBtn!: Phaser.GameObjects.Graphics
+  private playBtnHit!: Phaser.GameObjects.Rectangle
   private playBtnText!: Phaser.GameObjects.Text
   private balanceText!: Phaser.GameObjects.Text
   private stakeTexts!: Phaser.GameObjects.Text[]
   private stakeRects!: Phaser.GameObjects.Graphics[]
+  private stakeHits!: Phaser.GameObjects.Rectangle[]
   private overlay!: Phaser.GameObjects.Graphics
   private overlayText!: Phaser.GameObjects.Text
   private overlaySubText!: Phaser.GameObjects.Text
-  private dart!: Phaser.GameObjects.Graphics
-  private crosshairLines!: Phaser.GameObjects.Line[]
-  private dartboardRings!: Phaser.GameObjects.Graphics[]
+  private dartSprite!: Phaser.GameObjects.Image
+  private crosshairContainer!: Phaser.GameObjects.Container
+  private bullseye!: Phaser.GameObjects.Graphics
+  private dartboardCX!: number
+  private dartboardCY!: number
+  private particles!: Phaser.GameObjects.Particles.ParticleEmitter
 
   constructor() {
     super('GameScene')
   }
 
   preload() {
-    // No assets to preload
+    this.load.image('dart', '/dart.png')
+    this.load.image('confetti', '/confetti.png')
   }
 
   create() {
@@ -51,6 +61,8 @@ export class GameScene extends Phaser.Scene {
 
     this.bridge.onErr((message) => {
       this.showError(message)
+      this.isPlacing = false
+      this.updatePlayButton()
     })
 
     this.setupUI()
@@ -61,235 +73,218 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height
     const cx = W / 2
 
-    // Background
+    this.dartboardCX = cx
+    this.dartboardCY = H * 0.34
+
     this.cameras.main.setBackgroundColor('#05001A')
     this.drawGrid(W, H)
     this.drawDecorativeDots(W, H)
 
-    // Title
-    this.add.text(cx, 40, 'SHARP SHOOTER', {
-      fontSize: '24px', fontStyle: 'bold', color: '#ffffff'
+    // Header
+    this.add.text(cx, 36, 'SHARP SHOOTER', {
+      fontSize: '22px', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#00F0FF', strokeThickness: 1
     }).setOrigin(0.5)
 
-    this.add.text(cx, 70, 'HIGH OR LOW · HIT THE TARGET', {
-      fontSize: '11px', color: '#00F0FF'
+    this.add.text(cx, 62, 'HIGH OR LOW · HIT THE TARGET', {
+      fontSize: '10px', color: '#00F0FF'
     }).setOrigin(0.5)
 
     // Balance
-    this.balanceText = this.add.text(W - 16, 16, '₦0', {
+    this.balanceText = this.add.text(W - 16, 12, '₦0', {
       fontSize: '13px', color: '#aaaaaa'
     }).setOrigin(1, 0)
 
     // Dartboard
-    this.createDartboard(cx, H * 0.38)
+    this.createDartboard(cx, this.dartboardCY)
 
-    // LOW button
-    this.lowBtn = this.add.graphics()
-    this.drawHexagon(this.lowBtn, cx - 105, H * 0.62, 88, 70, '#0D0A2E', '#4B6EF5', 2)
-    this.lowBtn.setInteractive(new Phaser.Geom.Polygon([
-      cx - 105 - 44, H * 0.62 - 35,
-      cx - 105, H * 0.62 - 35,
-      cx - 105 + 44, H * 0.62,
-      cx - 105, H * 0.62 + 35,
-      cx - 105 - 44, H * 0.62 + 35,
-      cx - 105 - 44, H * 0.62
-    ]), Phaser.Geom.Polygon.Contains)
-    this.lowBtnText = this.add.text(cx - 105, H * 0.62 - 10, 'LOW', {
-      fontSize: '18px', fontStyle: 'bold', color: '#ffffff', align: 'center'
-    }).setOrigin(0.5)
-    this.add.text(cx - 105, H * 0.62 + 15, '1 - 5', {
-      fontSize: '12px', color: '#4B6EF5', align: 'center'
-    }).setOrigin(0.5)
-
-    // HIGH button
-    this.highBtn = this.add.graphics()
-    this.drawHexagon(this.highBtn, cx + 105, H * 0.62, 88, 70, '#2E0A0A', '#FF3A2D', 2)
-    this.highBtn.setInteractive(new Phaser.Geom.Polygon([
-      cx + 105 - 44, H * 0.62 - 35,
-      cx + 105, H * 0.62 - 35,
-      cx + 105 + 44, H * 0.62,
-      cx + 105, H * 0.62 + 35,
-      cx + 105 - 44, H * 0.62 + 35,
-      cx + 105 - 44, H * 0.62
-    ]), Phaser.Geom.Polygon.Contains)
-    this.highBtnText = this.add.text(cx + 105, H * 0.62 - 10, 'HIGH', {
-      fontSize: '18px', fontStyle: 'bold', color: '#ffffff', align: 'center'
-    }).setOrigin(0.5)
-    this.add.text(cx + 105, H * 0.62 + 15, '6 - 10', {
-      fontSize: '12px', color: '#FF3A2D', align: 'center'
-    }).setOrigin(0.5)
-
-    // Multiplier display
+    // Multiplier
     this.add.text(cx, H * 0.50, '1.80×', {
-      fontSize: '22px', fontStyle: 'bold', color: '#FFD700'
+      fontSize: '20px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5)
-    this.add.text(cx, H * 0.50 + 20, 'payout multiplier', {
-      fontSize: '11px', color: '#666666'
+    this.add.text(cx, H * 0.50 + 22, 'payout multiplier', {
+      fontSize: '10px', color: '#555555'
+    }).setOrigin(0.5)
+
+    // Buttons
+    const btnY = H * 0.63
+    const btnW = Math.min(W * 0.36, 140)
+    const btnH = 72
+    const gap = W * 0.12
+
+    this.lowBtn = this.add.graphics()
+    this.drawBtn(this.lowBtn, cx - gap - btnW / 2, btnY, btnW, btnH, '#0D0A2E', '#4B6EF5', 2)
+    this.lowBtnHit = this.add.rectangle(cx - gap - btnW / 2, btnY, btnW, btnH)
+      .setInteractive({ useHandCursor: true })
+    this.lowBtnText = this.add.text(cx - gap - btnW / 2, btnY - 12, 'LOW', {
+      fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
+    }).setOrigin(0.5)
+    this.lowBtnSub = this.add.text(cx - gap - btnW / 2, btnY + 14, '1 - 5', {
+      fontSize: '12px', color: '#4B6EF5'
+    }).setOrigin(0.5)
+
+    this.highBtn = this.add.graphics()
+    this.drawBtn(this.highBtn, cx + gap + btnW / 2, btnY, btnW, btnH, '#2E0A0A', '#FF3A2D', 2)
+    this.highBtnHit = this.add.rectangle(cx + gap + btnW / 2, btnY, btnW, btnH)
+      .setInteractive({ useHandCursor: true })
+    this.highBtnText = this.add.text(cx + gap + btnW / 2, btnY - 12, 'HIGH', {
+      fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
+    }).setOrigin(0.5)
+    this.highBtnSub = this.add.text(cx + gap + btnW / 2, btnY + 14, '6 - 10', {
+      fontSize: '12px', color: '#FF3A2D'
     }).setOrigin(0.5)
 
     // Stake selector
     const stakes = [100, 500, 1000, 5000]
     this.stakeRects = []
     this.stakeTexts = []
+    this.stakeHits = []
+    const stakeW = Math.min((W - 48) / 4 - 8, 80)
+    const stakeStartX = cx - (stakeW * 1.5 + 12)
     stakes.forEach((amount, i) => {
-      const x = cx - 150 + i * 100
-      const y = H * 0.78
+      const x = stakeStartX + i * (stakeW + 8)
+      const y = H * 0.775
       const rect = this.add.graphics()
-      this.drawPill(rect, x, y, 80, 36, '#0D0A2E', '#2a2060', 1)
-      rect.setInteractive(new Phaser.Geom.Ellipse(x, y, 80, 36), Phaser.Geom.Ellipse.Contains)
-      const txt = this.add.text(x, y, '₦' + (amount >= 1000 ? amount/1000 + 'k' : amount), {
-        fontSize: '13px', color: '#666666'
+      this.drawPill(rect, x, y, stakeW, 34, '#0D0A2E', '#2a2060', 1)
+      const hit = this.add.rectangle(x, y, stakeW, 34).setInteractive({ useHandCursor: true })
+      const txt = this.add.text(x, y, '₦' + (amount >= 1000 ? amount / 1000 + 'k' : amount), {
+        fontSize: '12px', color: '#666666'
       }).setOrigin(0.5)
-      rect.on('pointerdown', () => {
+      hit.on('pointerdown', () => {
         this.currentStake = amount
         this.updateStakeUI()
       })
       this.stakeRects.push(rect)
       this.stakeTexts.push(txt)
+      this.stakeHits.push(hit)
     })
 
     // Play button
+    const playW = W - 48
+    const playY = H * 0.875
     this.playBtn = this.add.graphics()
-    this.drawRoundedRect(this.playBtn, cx, H * 0.88, W - 48, 52, 14, '#1a1a2e', '#444444', 1)
-    this.playBtn.setInteractive(new Phaser.Geom.Rectangle(cx - (W - 48)/2, H * 0.88 - 26, W - 48, 52), Phaser.Geom.Rectangle.Contains)
-    this.playBtnText = this.add.text(cx, H * 0.88, 'Select HIGH or LOW', {
-      fontSize: '16px', fontStyle: 'bold', color: '#444444'
+    this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#1a1a2e', '#333333', 1)
+    this.playBtnHit = this.add.rectangle(cx, playY, playW, 52).setInteractive({ useHandCursor: true })
+    this.playBtnText = this.add.text(cx, playY, 'Select HIGH or LOW', {
+      fontSize: '15px', fontStyle: 'bold', color: '#444444'
     }).setOrigin(0.5)
 
-    // Overlay (hidden initially)
-    this.overlay = this.add.graphics()
-    this.overlay.fillStyle(0x000000, 0.85).fillRect(0, 0, W, H).setVisible(false)
-    this.overlayText = this.add.text(cx, H/2 - 40, '', {
+    // Overlay
+    this.overlay = this.add.graphics().setVisible(false).setDepth(10)
+    this.overlayText = this.add.text(cx, H / 2 - 50, '', {
       fontSize: '56px', fontStyle: 'bold', color: '#FFD700'
-    }).setOrigin(0.5).setVisible(false)
-    this.overlaySubText = this.add.text(cx, H/2 + 30, '', {
-      fontSize: '28px', color: '#ffffff'
-    }).setOrigin(0.5).setVisible(false)
+    }).setOrigin(0.5).setVisible(false).setDepth(11)
+    this.overlaySubText = this.add.text(cx, H / 2 + 20, '', {
+      fontSize: '22px', color: '#ffffff'
+    }).setOrigin(0.5).setVisible(false).setDepth(11)
 
-    // Dart
-    this.dart = this.add.graphics()
-    this.drawDart(this.dart, cx, -20)
-    this.dart.setVisible(false)
+    // Dart sprite
+    this.dartSprite = this.add.image(cx, -60, 'dart')
+      .setDisplaySize(32, 80)
+      .setAngle(180)
+      .setVisible(false)
+      .setDepth(6)
 
-    // Button interactions
-    this.lowBtn.on('pointerdown', () => this.selectPick('LOW'))
-    this.highBtn.on('pointerdown', () => this.selectPick('HIGH'))
-    this.playBtn.on('pointerdown', () => this.handlePlay())
+    // Particle emitter (pre-create, fire on win)
+    this.particles = this.add.particles(0, 0, 'confetti', {
+      speed: { min: 100, max: 280 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.6, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 1000,
+      quantity: 30,
+      emitting: false,
+    }).setDepth(12)
 
-    // Resize
-    this.scale.on('resize', () => {
-      this.scene.restart()
-    })
+    // Events
+    this.lowBtnHit.on('pointerdown', () => this.selectPick('LOW'))
+    this.highBtnHit.on('pointerdown', () => this.selectPick('HIGH'))
+    this.playBtnHit.on('pointerdown', () => this.handlePlay())
+    this.scale.on('resize', () => { this.scene.restart() })
 
     this.updateStakeUI()
   }
 
   private drawGrid(W: number, H: number) {
     const grid = this.add.graphics()
-    grid.lineStyle(1, 0x0A0530, 0.3)
-    for (let x = 0; x < W; x += 40) {
-      grid.moveTo(x, 0).lineTo(x, H)
-    }
-    for (let y = 0; y < H; y += 40) {
-      grid.moveTo(0, y).lineTo(W, y)
-    }
+    grid.lineStyle(1, 0x0A0530, 0.25)
+    for (let x = 0; x <= W; x += 40) { grid.moveTo(x, 0); grid.lineTo(x, H) }
+    for (let y = 0; y <= H; y += 40) { grid.moveTo(0, y); grid.lineTo(W, y) }
+    grid.strokePath()
   }
 
   private drawDecorativeDots(W: number, H: number) {
     const dots = this.add.graphics()
     const positions = [
-      { x: 30, y: 30 },
-      { x: W - 30, y: 30 },
-      { x: 30, y: H - 30 },
-      { x: W - 30, y: H - 30 },
-      { x: W/2, y: 30 },
-      { x: W/2, y: H - 30 },
-      { x: 30, y: H/2 },
-      { x: W - 30, y: H/2 }
+      { x: 24, y: 24 }, { x: W - 24, y: 24 },
+      { x: 24, y: H - 24 }, { x: W - 24, y: H - 24 },
+      { x: W / 2, y: 24 }, { x: W / 2, y: H - 24 },
+      { x: 24, y: H / 2 }, { x: W - 24, y: H / 2 }
     ]
     positions.forEach((pos, i) => {
-      dots.fillStyle(i % 2 === 0 ? 0x00F0FF : 0xFFD700)
-      dots.fillRect(pos.x, pos.y, 5, 5)
+      dots.fillStyle(i % 2 === 0 ? 0x00F0FF : 0xFFD700, 0.8)
+      dots.fillRect(pos.x - 3, pos.y - 3, 6, 6)
     })
   }
 
   private createDartboard(cx: number, cy: number) {
-    this.dartboardRings = []
     const rings = [
-      { radius: 90, color: 0x1a0a4a, width: 3, alpha: 1 },
-      { radius: 70, color: 0x4B6EF5, width: 2, alpha: 0.4 },
-      { radius: 50, color: 0x00F0FF, width: 2, alpha: 0.6 },
-      { radius: 30, color: 0xFF3A2D, width: 2, alpha: 0.7 },
-      { radius: 14, color: 0xFF3A2D, width: 2, alpha: 1 }
+      { r: 92, color: 0x1a0a4a, w: 3, a: 1, fill: false },
+      { r: 72, color: 0x4B6EF5, w: 2, a: 0.5, fill: false },
+      { r: 52, color: 0x00F0FF, w: 2, a: 0.7, fill: false },
+      { r: 32, color: 0xFF3A2D, w: 2, a: 0.8, fill: false },
+      { r: 15, color: 0xFF3A2D, w: 2, a: 1,   fill: true  },
     ]
     rings.forEach(ring => {
       const g = this.add.graphics()
-      g.lineStyle(ring.width, ring.color, ring.alpha)
-      if (ring.radius === 14) {
-        g.fillStyle(ring.color, ring.alpha)
-        g.fillCircle(cx, cy, ring.radius)
-      }
-      g.strokeCircle(cx, cy, ring.radius)
-      this.dartboardRings.push(g)
+      g.lineStyle(ring.w, ring.color, ring.a)
+      if (ring.fill) { g.fillStyle(ring.color, 1); g.fillCircle(cx, cy, ring.r) }
+      g.strokeCircle(cx, cy, ring.r)
     })
 
-    this.crosshairLines = []
-    const angles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4]
-    angles.forEach(angle => {
-      const line = this.add.line(0, 0, cx, cy, cx + Math.cos(angle) * 100, cy + Math.sin(angle) * 100, 0x00F0FF, 0.3)
-      line.setOrigin(0, 0)
-      this.crosshairLines.push(line)
-    })
+    this.crosshairContainer = this.add.container(cx, cy)
+    const ch = this.add.graphics()
+    ch.lineStyle(1, 0x00F0FF, 0.35)
+    ch.lineBetween(-110, 0, 110, 0)
+    ch.lineBetween(0, -110, 0, 110)
+    ch.lineBetween(-78, -78, 78, 78)
+    ch.lineBetween(78, -78, -78, 78)
+    this.crosshairContainer.add(ch)
+
+    this.bullseye = this.add.graphics()
+    this.bullseye.fillStyle(0xFF3A2D, 1)
+    this.bullseye.fillCircle(cx, cy, 15)
 
     this.numberDisplay = this.add.text(cx, cy, '?', {
-      fontSize: '36px', fontStyle: 'bold', color: '#ffffff'
-    }).setOrigin(0.5)
+      fontSize: '32px', fontStyle: 'bold', color: '#ffffff'
+    }).setOrigin(0.5).setDepth(2)
   }
 
-  private drawHexagon(g: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, fill: string, border: string, borderWidth: number) {
-    g.fillStyle(parseInt(fill.substring(1), 16))
-    g.lineStyle(borderWidth, parseInt(border.substring(1), 16))
-    const points = [
-      x - width/2, y - height/2,
-      x, y - height/2,
-      x + width/2, y,
-      x, y + height/2,
-      x - width/2, y + height/2,
-      x - width/2, y
-    ]
-    g.fillPoints(points)
-    g.strokePoints(points, true)
+  private drawBtn(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, fill: string, border: string, bw: number) {
+    g.clear()
+    g.fillStyle(parseInt(fill.replace('#', ''), 16), 1)
+    g.lineStyle(bw, parseInt(border.replace('#', ''), 16), 1)
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 10)
+    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 10)
   }
 
-  private drawPill(g: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, fill: string, border: string, borderWidth: number) {
-    g.fillStyle(parseInt(fill.substring(1), 16))
-    g.lineStyle(borderWidth, parseInt(border.substring(1), 16))
-    g.fillRoundedRect(x - width/2, y - height/2, width, height, height/2)
-    g.strokeRoundedRect(x - width/2, y - height/2, width, height, height/2)
+  private drawPill(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, fill: string, border: string, bw: number) {
+    g.clear()
+    g.fillStyle(parseInt(fill.replace('#', ''), 16), 1)
+    g.lineStyle(bw, parseInt(border.replace('#', ''), 16), 1)
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, h / 2)
+    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, h / 2)
   }
 
-  private drawRoundedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, radius: number, fill: string, border: string, borderWidth: number) {
-    g.fillStyle(parseInt(fill.substring(1), 16))
-    g.lineStyle(borderWidth, parseInt(border.substring(1), 16))
-    g.fillRoundedRect(x - width/2, y - height/2, width, height, radius)
-    g.strokeRoundedRect(x - width/2, y - height/2, width, height, radius)
-  }
-
-  private drawDart(g: Phaser.GameObjects.Graphics, x: number, y: number) {
-    g.fillStyle(0xFFD700)
-    g.lineStyle(1, 0xFFD700)
-    g.beginPath()
-    g.moveTo(x, y)
-    g.lineTo(x + 6, y + 20)
-    g.lineTo(x - 6, y + 20)
-    g.closePath()
-    g.fillPath()
-    g.strokePath()
-    g.lineBetween(x, y, x, y + 20)
+  private drawRoundedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, r: number, fill: string, border: string, bw: number) {
+    g.clear()
+    g.fillStyle(parseInt(fill.replace('#', ''), 16), 1)
+    g.lineStyle(bw, parseInt(border.replace('#', ''), 16), 1)
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, r)
+    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, r)
   }
 
   private enableUI() {
-    this.isAuthenticated = true
     this.updatePlayButton()
   }
 
@@ -312,26 +307,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private animateDartThrow() {
-    const W = this.scale.width
-    const H = this.scale.height
-    const cx = W / 2
-    this.dart.setVisible(true)
-    this.dart.setPosition(cx, -20)
+    const cx = this.scale.width / 2
+    this.dartSprite.setPosition(cx, -60).setVisible(true)
     this.tweens.add({
-      targets: this.dart,
-      y: H * 0.38,
-      duration: 400,
-      ease: 'Power2',
-      onComplete: () => {
-        this.time.delayedCall(1500, () => {
-          this.tweens.add({
-            targets: this.dart,
-            y: H + 20,
-            duration: 300,
-            onComplete: () => this.dart.setVisible(false)
-          })
-        })
-      }
+      targets: this.dartSprite,
+      y: this.dartboardCY - 10,
+      duration: 380,
+      ease: 'Power3',
     })
   }
 
@@ -339,34 +321,37 @@ export class GameScene extends Phaser.Scene {
     const roll = (result.result as { roll: number }).roll
     this.balance = result.newBalance
     this.balanceText.setText('₦' + this.balance.toLocaleString())
-    
-    // Animate number rolling
+
     let count = 0
     this.time.addEvent({
-      delay: 80,
-      repeat: 15,
+      delay: 75,
+      repeat: 14,
       callback: () => {
         this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
         count++
-        if (count >= 15) {
+        if (count >= 14) {
           this.numberDisplay.setText(String(roll))
+
+          // Fly dart away
+          this.time.delayedCall(700, () => {
+            this.tweens.add({
+              targets: this.dartSprite,
+              y: this.scale.height + 60,
+              duration: 280,
+              ease: 'Power2',
+              onComplete: () => this.dartSprite.setVisible(false)
+            })
+          })
+
           if (result.win) {
             this.numberDisplay.setColor('#00E676')
-            this.tweens.add({
-              targets: this.numberDisplay,
-              scale: 1.4,
-              duration: 150,
-              yoyo: true
-            })
+            this.bullseye.clear()
+            this.bullseye.fillStyle(0x00E676, 1)
+            this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+            this.tweens.add({ targets: this.numberDisplay, scale: 1.4, duration: 150, yoyo: true })
           } else {
-            this.numberDisplay.setColor('#FF3A2D')
-            this.tweens.add({
-              targets: this.dartboardRings,
-              x: '+=4',
-              duration: 50,
-              yoyo: true,
-              repeat: 4
-            })
+            this.numberDisplay.setColor('#FF4444')
+            this.cameras.main.shake(250, 0.006)
           }
           this.showResultOverlay(result)
         }
@@ -375,122 +360,125 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showResultOverlay(result: BetResult) {
-    const win = result.win
     const W = this.scale.width
     const H = this.scale.height
     const cx = W / 2
-    
+
     this.overlay.clear()
-    this.overlay.fillStyle(win ? 0x003300 : 0x1a0000, 0.88)
+    this.overlay.fillStyle(result.win ? 0x002200 : 0x1a0000, 0.9)
     this.overlay.fillRect(0, 0, W, H)
     this.overlay.setVisible(true)
-    
-    this.overlayText.setText(win ? 'WIN!' : 'MISS').setVisible(true)
-    this.overlaySubText.setText(
-      win ? '₦' + result.payout.toLocaleString() : 'Better luck next time'
-    ).setVisible(true)
-    
-    if (win) {
-      // Create particles
-      for (let i = 0; i < 20; i++) {
-        const particle = this.add.graphics()
-        const color = [0xFFD700, 0x00F0FF, 0x00E676][Math.floor(Math.random() * 3)]
-        particle.fillStyle(color)
-        particle.fillCircle(0, 0, 2)
-        particle.setPosition(cx, H * 0.38)
-        this.tweens.add({
-          targets: particle,
-          x: cx + Math.cos(Math.random() * Math.PI * 2) * 200,
-          y: H * 0.38 + Math.sin(Math.random() * Math.PI * 2) * 200,
-          alpha: 0,
-          duration: 1000,
-          onComplete: () => particle.destroy()
-        })
-      }
-    } else {
-      // Screen shake
-      this.cameras.main.shake(300, 0.005)
+
+    this.overlayText
+      .setText(result.win ? 'WIN!' : 'MISS')
+      .setColor(result.win ? '#FFD700' : '#FF3A2D')
+      .setVisible(true)
+    this.overlaySubText
+      .setText(result.win ? '₦' + result.payout.toLocaleString() : 'Better luck next time')
+      .setVisible(true)
+
+    if (result.win) {
+      // Burst confetti from bullseye center
+      this.particles.setPosition(cx, this.dartboardCY)
+      this.particles.explode(40)
     }
-    
-    this.time.delayedCall(win ? 2500 : 2000, () => {
+
+    this.time.delayedCall(result.win ? 2500 : 2000, () => {
       this.overlay.setVisible(false)
       this.overlayText.setVisible(false)
       this.overlaySubText.setVisible(false)
-      this.numberDisplay.setText('?').setColor('#ffffff')
+      this.numberDisplay.setText('?').setColor('#ffffff').setScale(1)
+      this.bullseye.clear()
+      this.bullseye.fillStyle(0xFF3A2D, 1)
+      this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
       this.selectedPick = null
-      this.lowBtn.clear()
-      this.highBtn.clear()
-      this.drawHexagon(this.lowBtn, this.scale.width/2 - 105, this.scale.height * 0.62, 88, 70, '#0D0A2E', '#4B6EF5', 2)
-      this.drawHexagon(this.highBtn, this.scale.width/2 + 105, this.scale.height * 0.62, 88, 70, '#2E0A0A', '#FF3A2D', 2)
-      this.lowBtnText.setColor('#ffffff')
-      this.highBtnText.setColor('#ffffff')
       this.isPlacing = false
+      this.redrawButtons()
       this.updatePlayButton()
     })
   }
 
+  private redrawButtons() {
+    const W = this.scale.width
+    const H = this.scale.height
+    const cx = W / 2
+    const btnY = H * 0.63
+    const btnW = Math.min(W * 0.36, 140)
+    const gap = W * 0.12
+    this.drawBtn(this.lowBtn, cx - gap - btnW / 2, btnY, btnW, 72, '#0D0A2E', '#4B6EF5', 2)
+    this.drawBtn(this.highBtn, cx + gap + btnW / 2, btnY, btnW, 72, '#2E0A0A', '#FF3A2D', 2)
+    this.lowBtnText.setColor('#ffffff')
+    this.highBtnText.setColor('#ffffff')
+    this.lowBtnSub.setColor('#4B6EF5')
+    this.highBtnSub.setColor('#FF3A2D')
+  }
+
   private showError(message: string) {
     const cx = this.scale.width / 2
-    const errText = this.add.text(cx, 120, message, {
-      fontSize: '14px', color: '#ff4444',
+    const err = this.add.text(cx, 110, message, {
+      fontSize: '13px', color: '#ff4444',
       backgroundColor: '#1a0000', padding: { x: 12, y: 8 }
-    }).setOrigin(0.5)
-    this.time.delayedCall(3000, () => errText.destroy())
+    }).setOrigin(0.5).setDepth(20)
+    this.time.delayedCall(3000, () => err.destroy())
   }
 
   private selectPick(pick: 'HIGH' | 'LOW') {
     this.selectedPick = pick
-    this.lowBtn.clear()
-    this.highBtn.clear()
-    if (pick === 'LOW') {
-      this.drawHexagon(this.lowBtn, this.scale.width/2 - 105, this.scale.height * 0.62, 88, 70, '#1a1060', '#4B6EF5', 3)
-      this.lowBtn.setBlendMode(Phaser.BlendModes.ADD)
-      this.lowBtn.fillStyle(0x4B6EF5, 0.5)
-      this.lowBtnText.setColor('#ffffff')
-      this.drawHexagon(this.highBtn, this.scale.width/2 + 105, this.scale.height * 0.62, 88, 70, '#2E0A0A', '#FF3A2D', 2)
-      this.highBtnText.setColor('#ffffff')
-    } else {
-      this.drawHexagon(this.lowBtn, this.scale.width/2 - 105, this.scale.height * 0.62, 88, 70, '#0D0A2E', '#4B6EF5', 2)
-      this.lowBtnText.setColor('#ffffff')
-      this.drawHexagon(this.highBtn, this.scale.width/2 + 105, this.scale.height * 0.62, 88, 70, '#3d0a0a', '#FF3A2D', 3)
-      this.highBtn.setBlendMode(Phaser.BlendModes.ADD)
-      this.highBtn.fillStyle(0xFF3A2D, 0.5)
-      this.highBtnText.setColor('#ffffff')
-    }
+    const W = this.scale.width
+    const H = this.scale.height
+    const cx = W / 2
+    const btnY = H * 0.63
+    const btnW = Math.min(W * 0.36, 140)
+    const gap = W * 0.12
+    this.drawBtn(this.lowBtn, cx - gap - btnW / 2, btnY, btnW, 72,
+      pick === 'LOW' ? '#1a1060' : '#0D0A2E', '#4B6EF5', pick === 'LOW' ? 3 : 2)
+    this.drawBtn(this.highBtn, cx + gap + btnW / 2, btnY, btnW, 72,
+      pick === 'HIGH' ? '#3d0a0a' : '#2E0A0A', '#FF3A2D', pick === 'HIGH' ? 3 : 2)
+    this.lowBtnText.setColor(pick === 'LOW' ? '#4B6EF5' : '#ffffff')
+    this.highBtnText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
     this.updatePlayButton()
   }
 
   private updateStakeUI() {
     const stakes = [100, 500, 1000, 5000]
+    const W = this.scale.width
+    const cx = W / 2
+    const H = this.scale.height
+    const stakeW = Math.min((W - 48) / 4 - 8, 80)
+    const stakeStartX = cx - (stakeW * 1.5 + 12)
     stakes.forEach((amount, i) => {
-      const isSelected = this.currentStake === amount
-      this.stakeRects[i].clear()
-      this.drawPill(this.stakeRects[i], this.scale.width/2 - 150 + i * 100, this.scale.height * 0.78, 80, 36, 
-        isSelected ? '#1a1060' : '#0D0A2E', 
-        isSelected ? '#4B6EF5' : '#2a2060', 1)
-      this.stakeTexts[i].setColor(isSelected ? '#ffffff' : '#666666')
+      const x = stakeStartX + i * (stakeW + 8)
+      const y = H * 0.775
+      const sel = this.currentStake === amount
+      this.drawPill(this.stakeRects[i], x, y, stakeW, 34,
+        sel ? '#1a1060' : '#0D0A2E',
+        sel ? '#4B6EF5' : '#2a2060', 1)
+      this.stakeTexts[i].setColor(sel ? '#ffffff' : '#666666')
     })
     this.updatePlayButton()
   }
 
   private updatePlayButton() {
-    this.playBtn.clear()
+    const W = this.scale.width
+    const H = this.scale.height
+    const cx = W / 2
+    const playW = W - 48
+    const playY = H * 0.875
     if (this.selectedPick && !this.isPlacing) {
-      this.drawRoundedRect(this.playBtn, this.scale.width/2, this.scale.height * 0.88, this.scale.width - 48, 52, 14, '#B8912A', '#FFFFFF', 1)
+      this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#B8912A', '#FFD700', 1)
       this.playBtnText.setText('PLAY · ₦' + this.currentStake.toLocaleString()).setColor('#ffffff')
     } else if (this.isPlacing) {
-      this.drawRoundedRect(this.playBtn, this.scale.width/2, this.scale.height * 0.88, this.scale.width - 48, 52, 14, '#333333', '#444444', 1)
-      this.playBtnText.setText('Placing bet...').setColor('#ffffff')
+      this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#2a2a2a', '#444444', 1)
+      this.playBtnText.setText('Placing bet...').setColor('#aaaaaa')
     } else {
-      this.drawRoundedRect(this.playBtn, this.scale.width/2, this.scale.height * 0.88, this.scale.width - 48, 52, 14, '#1a1a2e', '#444444', 1)
+      this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#1a1a2e', '#333333', 1)
       this.playBtnText.setText('Select HIGH or LOW').setColor('#444444')
     }
   }
 
   update() {
-    // Rotate crosshair lines
-    this.crosshairLines.forEach(line => {
-      line.rotation += 0.003
-    })
+    if (this.crosshairContainer) {
+      this.crosshairContainer.rotation += 0.003
+    }
   }
 }
