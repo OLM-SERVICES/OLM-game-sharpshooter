@@ -3,32 +3,32 @@ import type { BetResult } from '../bridge'
 
 export class GameScene extends Phaser.Scene {
   private isPlacing: boolean = false
-  private balance: number = 0
   private isAuthenticated: boolean = false
   private bridge!: CasinoBridge
-  private selectedPick: 'HIGH' | 'LOW' | null = null
-  private currentStake: number = 500
 
   private numberDisplay!: Phaser.GameObjects.Text
-  private playBtn!: Phaser.GameObjects.Graphics
-  private playBtnHit!: Phaser.GameObjects.Rectangle
-  private playBtnText!: Phaser.GameObjects.Text
-  private balanceText!: Phaser.GameObjects.Text
   private overlay!: Phaser.GameObjects.Graphics
   private overlayText!: Phaser.GameObjects.Text
   private overlaySubText!: Phaser.GameObjects.Text
+  private dartSprite!: Phaser.GameObjects.Image
   private crosshairContainer!: Phaser.GameObjects.Container
   private bullseye!: Phaser.GameObjects.Graphics
   private dartboardCX!: number
   private dartboardCY!: number
   private particles!: Phaser.GameObjects.Particles.ParticleEmitter
 
+  // Exposed for parent to call
+  public currentPick: 'HIGH' | 'LOW' | null = null
+  public currentStake: number = 500
+  public currentBalance: number = 0
+
   constructor() {
     super('GameScene')
   }
 
   preload() {
-    // Custom animations will be created programmatically
+    this.load.image('dart', '/dart.png')
+    this.load.image('confetti', '/confetti.png')
   }
 
   create() {
@@ -37,9 +37,9 @@ export class GameScene extends Phaser.Scene {
 
     this.bridge.onInit((balance: number) => {
       this.isAuthenticated = true
-      this.balance = balance
-      this.balanceText.setText('₦' + balance.toLocaleString())
-      this.enableUI()
+      this.currentBalance = balance
+      // Notify parent of balance
+      window.parent.postMessage({ type: 'BALANCE_UPDATE', payload: { balance } }, PARENT_ORIGIN)
     })
 
     this.bridge.onResult((result) => {
@@ -49,7 +49,22 @@ export class GameScene extends Phaser.Scene {
     this.bridge.onErr((message) => {
       this.showError(message)
       this.isPlacing = false
-      this.updatePlayButton()
+      // Notify parent bet is done
+      window.parent.postMessage({ type: 'BET_DONE', payload: {} }, PARENT_ORIGIN)
+    })
+
+    // Listen for commands from parent
+    window.addEventListener('message', (event) => {
+      const { type, payload } = event.data || {}
+      if (type === 'SET_PICK') {
+        this.currentPick = payload.pick
+        this.updatePickVisual()
+      }
+      if (type === 'PLACE_BET') {
+        this.currentStake = payload.stake
+        this.currentPick = payload.pick
+        this.placeBet()
+      }
     })
 
     this.setupUI()
@@ -61,93 +76,124 @@ export class GameScene extends Phaser.Scene {
     const cx = W / 2
 
     this.dartboardCX = cx
-    this.dartboardCY = H * 0.34
+    this.dartboardCY = H * 0.5  // centered since no controls below
 
     this.cameras.main.setBackgroundColor('#05001A')
     this.drawGrid(W, H)
     this.drawDecorativeDots(W, H)
 
-    // Header
-    this.add.text(cx, 36, 'SHARP SHOOTER', {
-      fontSize: '22px', fontStyle: 'bold', color: '#ffffff',
+    // Subtle title
+    this.add.text(cx, 28, 'SHARP SHOOTER', {
+      fontSize: '18px', fontStyle: 'bold', color: '#ffffff',
       stroke: '#00F0FF', strokeThickness: 1
     }).setOrigin(0.5)
 
-    this.add.text(cx, 62, 'HIGH OR LOW · HIT THE TARGET', {
-      fontSize: '10px', color: '#00F0FF'
+    this.add.text(cx, 52, 'HIGH OR LOW · HIT THE TARGET', {
+      fontSize: '9px', color: '#00F0FF'
     }).setOrigin(0.5)
 
-    // Balance
-    this.balanceText = this.add.text(W - 16, 12, '₦0', {
-      fontSize: '13px', color: '#aaaaaa'
-    }).setOrigin(1, 0)
-
-    // Dartboard
+    // Dartboard centered
     this.createDartboard(cx, this.dartboardCY)
 
-    // Multiplier
-    this.add.text(cx, H * 0.50, '1.80×', {
-      fontSize: '20px', fontStyle: 'bold', color: '#FFD700'
+    // Multiplier below dartboard
+    this.add.text(cx, this.dartboardCY + 110, '1.80×', {
+      fontSize: '18px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5)
-    this.add.text(cx, H * 0.50 + 22, 'payout multiplier', {
-      fontSize: '10px', color: '#555555'
+    this.add.text(cx, this.dartboardCY + 132, 'payout multiplier', {
+      fontSize: '9px', color: '#444444'
     }).setOrigin(0.5)
 
-    // Stake and pick will be received via postMessage
-
-    // Play button
-    const playW = W - 48
-    const playY = H * 0.875
-    this.playBtn = this.add.graphics()
-    this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#1a1a2e', '#333333', 1)
-    this.playBtnHit = this.add.rectangle(cx, playY, playW, 52).setInteractive({ useHandCursor: true })
-    this.playBtnText = this.add.text(cx, playY, 'Select HIGH or LOW', {
-      fontSize: '15px', fontStyle: 'bold', color: '#444444'
-    }).setOrigin(0.5)
+    // Pick indicator (shows selected pick)
+    this.createPickIndicator(cx, this.dartboardCY + 165, W)
 
     // Overlay
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
-    this.overlayText = this.add.text(cx, H / 2 - 50, '', {
-      fontSize: '56px', fontStyle: 'bold', color: '#FFD700'
+    this.overlayText = this.add.text(cx, H / 2 - 40, '', {
+      fontSize: '52px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
     this.overlaySubText = this.add.text(cx, H / 2 + 20, '', {
-      fontSize: '22px', color: '#ffffff'
+      fontSize: '20px', color: '#ffffff'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
 
+    // Dart sprite
+    this.dartSprite = this.add.image(cx, -60, 'dart')
+      .setDisplaySize(28, 70)
+      .setAngle(180)
+      .setVisible(false)
+      .setDepth(6)
 
-    // Custom particle emitter (more vibrant confetti)
-    this.particles = this.add.particles(0, 0, undefined, {
-      speed: { min: 150, max: 350 },
+    // Particles
+    this.particles = this.add.particles(0, 0, 'confetti', {
+      speed: { min: 100, max: 280 },
       angle: { min: 0, max: 360 },
-      scale: { start: 0.8, end: 0 },
+      scale: { start: 0.6, end: 0 },
       alpha: { start: 1, end: 0 },
-      lifespan: 1200,
-      quantity: 50,
+      lifespan: 1000,
+      quantity: 30,
       emitting: false,
-      blendMode: 'SCREEN',
-      tint: [
-        0xFF0000, 0x00FF00, 0x0000FF, 
-        0xFFFF00, 0xFF00FF, 0x00FFFF,
-        0xFFD700, 0x4B6EF5, 0xFF3A2D
-      ],
-      rotate: { start: 0, end: 360 },
-      gravityY: 200
     }).setDepth(12)
 
-    // Events
-    this.playBtnHit.on('pointerdown', () => this.handlePlay())
     this.scale.on('resize', () => { this.scene.restart() })
+  }
 
-    // Listen for stake/pick messages from parent
-    window.addEventListener('message', (event) => {
-      if (event.data.type === 'SET_STAKE') {
-        this.currentStake = event.data.stake
-      } else if (event.data.type === 'SET_PICK') {
-        this.selectedPick = event.data.pick
-      }
+  private createPickIndicator(cx: number, y: number, W: number) {
+    const btnW = Math.min(W * 0.38, 150)
+    const gap = W * 0.10
+
+    // LOW box
+    const lowGfx = this.add.graphics()
+    lowGfx.lineStyle(2, 0x4B6EF5, 1)
+    lowGfx.fillStyle(0x0D0A2E, 1)
+    lowGfx.fillRoundedRect(cx - gap - btnW - btnW / 2, y - 28, btnW, 56, 10)
+    lowGfx.strokeRoundedRect(cx - gap - btnW - btnW / 2, y - 28, btnW, 56, 10)
+    this.add.text(cx - gap - btnW, y - 10, 'LOW', {
+      fontSize: '16px', fontStyle: 'bold', color: '#ffffff'
+    }).setOrigin(0.5)
+    this.add.text(cx - gap - btnW, y + 12, '1 - 5', {
+      fontSize: '11px', color: '#4B6EF5'
+    }).setOrigin(0.5)
+
+    // HIGH box
+    const highGfx = this.add.graphics()
+    highGfx.lineStyle(2, 0xFF3A2D, 1)
+    highGfx.fillStyle(0x2E0A0A, 1)
+    highGfx.fillRoundedRect(cx + gap, y - 28, btnW, 56, 10)
+    highGfx.strokeRoundedRect(cx + gap, y - 28, btnW, 56, 10)
+    this.add.text(cx + gap + btnW / 2, y - 10, 'HIGH', {
+      fontSize: '16px', fontStyle: 'bold', color: '#ffffff'
+    }).setOrigin(0.5)
+    this.add.text(cx + gap + btnW / 2, y + 12, '6 - 10', {
+      fontSize: '11px', color: '#FF3A2D'
+    }).setOrigin(0.5)
+
+    // Make them interactive for pick selection
+    const lowHit = this.add.rectangle(cx - gap - btnW, y, btnW, 56)
+      .setInteractive({ useHandCursor: true })
+    const highHit = this.add.rectangle(cx + gap + btnW / 2, y, btnW, 56)
+      .setInteractive({ useHandCursor: true })
+
+    lowHit.on('pointerdown', () => {
+      const PARENT_ORIGIN = import.meta.env.VITE_PARENT_ORIGIN || '*'
+      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, PARENT_ORIGIN)
     })
+    highHit.on('pointerdown', () => {
+      const PARENT_ORIGIN = import.meta.env.VITE_PARENT_ORIGIN || '*'
+      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, PARENT_ORIGIN)
+    })
+  }
 
-    this.updatePlayButton()
+  private updatePickVisual() {
+    // Visual feedback handled via overlay flash
+    if (this.currentPick) {
+      const color = this.currentPick === 'LOW' ? '#4B6EF5' : '#FF3A2D'
+      const flash = this.add.text(
+        this.scale.width / 2,
+        this.dartboardCY - 120,
+        `${this.currentPick} selected`,
+        { fontSize: '13px', color, backgroundColor: '#000000', padding: { x: 10, y: 6 } }
+      ).setOrigin(0.5).setDepth(15)
+      this.time.delayedCall(800, () => flash.destroy())
+    }
   }
 
   private drawGrid(W: number, H: number) {
@@ -174,7 +220,7 @@ export class GameScene extends Phaser.Scene {
 
   private createDartboard(cx: number, cy: number) {
     const rings = [
-      { r: 92, color: 0x1a0a4a, w: 3, a: 1, fill: false },
+      { r: 92, color: 0x1a0a4a, w: 3, a: 1,   fill: false },
       { r: 72, color: 0x4B6EF5, w: 2, a: 0.5, fill: false },
       { r: 52, color: 0x00F0FF, w: 2, a: 0.7, fill: false },
       { r: 32, color: 0xFF3A2D, w: 2, a: 0.8, fill: false },
@@ -205,45 +251,37 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(2)
   }
 
-
-  private drawRoundedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, r: number, fill: string, border: string, bw: number) {
-    g.clear()
-    g.fillStyle(parseInt(fill.replace('#', ''), 16), 1)
-    g.lineStyle(bw, parseInt(border.replace('#', ''), 16), 1)
-    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, r)
-    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, r)
-  }
-
-  private enableUI() {
-    this.updatePlayButton()
-  }
-
-  private handlePlay() {
-    if (!this.selectedPick || this.isPlacing || !this.isAuthenticated) return
-    if (this.balance < this.currentStake) {
+  public placeBet() {
+    if (!this.currentPick || this.isPlacing || !this.isAuthenticated) return
+    if (this.currentBalance < this.currentStake) {
       this.showError('Insufficient balance')
       return
     }
     this.isPlacing = true
-    this.updatePlayButton()
     this.animateDartThrow()
     const clientSeed = Math.random().toString(36).substring(2)
     this.bridge.placeBet({
       game: 'SHARP_SHOOTER',
       stake: this.currentStake,
-      gameParams: { pick: this.selectedPick },
+      gameParams: { pick: this.currentPick },
       clientSeed
     })
   }
 
   private animateDartThrow() {
-    // Dart animation removed
+    const cx = this.scale.width / 2
+    this.dartSprite.setPosition(cx, -60).setVisible(true)
+    this.tweens.add({
+      targets: this.dartSprite,
+      y: this.dartboardCY - 10,
+      duration: 380,
+      ease: 'Power3',
+    })
   }
 
   private handleResult(result: BetResult) {
     const roll = (result.result as { roll: number }).roll
-    this.balance = result.newBalance
-    this.balanceText.setText('₦' + this.balance.toLocaleString())
+    this.currentBalance = result.newBalance
 
     let count = 0
     this.time.addEvent({
@@ -254,6 +292,16 @@ export class GameScene extends Phaser.Scene {
         count++
         if (count >= 14) {
           this.numberDisplay.setText(String(roll))
+
+          this.time.delayedCall(700, () => {
+            this.tweens.add({
+              targets: this.dartSprite,
+              y: this.scale.height + 60,
+              duration: 280,
+              ease: 'Power2',
+              onComplete: () => this.dartSprite.setVisible(false)
+            })
+          })
 
           if (result.win) {
             this.numberDisplay.setColor('#00E676')
@@ -290,7 +338,6 @@ export class GameScene extends Phaser.Scene {
       .setVisible(true)
 
     if (result.win) {
-      // Burst confetti from bullseye center
       this.particles.setPosition(cx, this.dartboardCY)
       this.particles.explode(40)
     }
@@ -303,38 +350,25 @@ export class GameScene extends Phaser.Scene {
       this.bullseye.clear()
       this.bullseye.fillStyle(0xFF3A2D, 1)
       this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-      this.selectedPick = null
       this.isPlacing = false
-      this.updatePlayButton()
+      this.currentPick = null
+
+      // Notify parent bet is complete
+      const PARENT_ORIGIN = import.meta.env.VITE_PARENT_ORIGIN || '*'
+      window.parent.postMessage({
+        type: 'BET_DONE',
+        payload: { newBalance: this.currentBalance }
+      }, PARENT_ORIGIN)
     })
   }
 
-
   private showError(message: string) {
     const cx = this.scale.width / 2
-    const err = this.add.text(cx, 110, message, {
+    const err = this.add.text(cx, 80, message, {
       fontSize: '13px', color: '#ff4444',
       backgroundColor: '#1a0000', padding: { x: 12, y: 8 }
     }).setOrigin(0.5).setDepth(20)
     this.time.delayedCall(3000, () => err.destroy())
-  }
-
-  private updatePlayButton() {
-    const W = this.scale.width
-    const H = this.scale.height
-    const cx = W / 2
-    const playW = W - 48
-    const playY = H * 0.875
-    if (this.selectedPick && !this.isPlacing) {
-      this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#B8912A', '#FFD700', 1)
-      this.playBtnText.setText('PLAY · ₦' + this.currentStake.toLocaleString()).setColor('#ffffff')
-    } else if (this.isPlacing) {
-      this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#2a2a2a', '#444444', 1)
-      this.playBtnText.setText('Placing bet...').setColor('#aaaaaa')
-    } else {
-      this.drawRoundedRect(this.playBtn, cx, playY, playW, 52, 14, '#1a1a2e', '#333333', 1)
-      this.playBtnText.setText('Select HIGH or LOW').setColor('#444444')
-    }
   }
 
   update() {
