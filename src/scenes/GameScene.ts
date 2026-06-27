@@ -144,7 +144,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createDartboard(this.cx, this.dartboardCY)
 
-    this.add.text(this.cx, this.dartboardCY + 112, '1.80×', {
+    this.add.text(this.cx, this.dartboardCY + 112, '1.90×', {
       fontSize: '20px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5)
     this.add.text(this.cx, this.dartboardCY + 135, 'payout multiplier', {
