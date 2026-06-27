@@ -46,7 +46,7 @@ export class GameScene extends Phaser.Scene {
 
   // Total roll duration in ms — used to time win/loss sound exactly at reveal
   // delays array sums to: 120+110+100+90+80+70+65+60+60+65+70+80+90+110+130 = 1300ms
-  private readonly ROLL_TOTAL_MS = 1300
+  
 
   constructor() {
     super('GameScene')
