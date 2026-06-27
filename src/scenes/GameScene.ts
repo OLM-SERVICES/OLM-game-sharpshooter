@@ -36,6 +36,8 @@ export class GameScene extends Phaser.Scene {
 
   private rollSound!: Phaser.Sound.BaseSound
 
+  private btnH: number = 64
+
   public currentPick: 'HIGH' | 'LOW' | null = null
   public currentStake: number = 500
   public currentBalance: number = 0
@@ -99,7 +101,6 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    // Start music immediately — parent page interaction already unlocked audio context
     this.time.delayedCall(300, () => {
       const ctx = (this.sound as any).context
       if (ctx) {
@@ -121,8 +122,10 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height
     this.cx = W / 2
 
+    const isMobile = W < 500
+
     this.dartboardCX = this.cx
-    this.dartboardCY = H * 0.40
+    this.dartboardCY = isMobile ? H * 0.33 : H * 0.38
 
     this.cameras.main.setBackgroundColor('#05001A')
 
@@ -136,22 +139,23 @@ export class GameScene extends Phaser.Scene {
     this.spotlight = this.add.graphics()
     this.drawSpotlight(this.cx, this.dartboardCY)
 
-    this.createGlitchTitle(this.cx, 28)
+    this.createGlitchTitle(this.cx, isMobile ? 20 : 28)
 
-    this.add.text(this.cx, 58, 'HIGH OR LOW · HIT THE TARGET', {
+    this.add.text(this.cx, isMobile ? 38 : 58, 'HIGH OR LOW · HIT THE TARGET', {
       fontSize: '10px', color: '#00F0FF'
     }).setOrigin(0.5)
 
     this.createDartboard(this.cx, this.dartboardCY)
 
-    this.add.text(this.cx, this.dartboardCY + 112, '1.90×', {
-      fontSize: '20px', fontStyle: 'bold', color: '#FFD700'
+    const multY = isMobile ? this.dartboardCY + 88 : this.dartboardCY + 112
+    this.add.text(this.cx, multY, '1.90×', {
+      fontSize: isMobile ? '15px' : '20px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5)
-    this.add.text(this.cx, this.dartboardCY + 135, 'payout multiplier', {
+    this.add.text(this.cx, multY + (isMobile ? 16 : 22), 'payout multiplier', {
       fontSize: '10px', color: '#444444'
     }).setOrigin(0.5)
 
-    this.createPickButtons(W, H)
+    this.createPickButtons(W, H, isMobile)
 
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
     this.overlayText = this.add.text(this.cx, H / 2 - 40, '', {
@@ -203,24 +207,30 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5).setDepth(2)
   }
 
-  private createPickButtons(W: number, H: number) {
-    this.btnW = Math.floor(W * 0.40)
-    this.btnGap = Math.floor(W * 0.05)
-    this.btnY = H * 0.775
+  private createPickButtons(W: number, H: number, isMobile: boolean = false) {
+    this.btnH   = isMobile ? 52 : 64
+    this.btnW   = isMobile ? Math.floor(W * 0.43) : Math.floor(W * 0.40)
+    this.btnGap = Math.floor(W * 0.04)
+    this.btnY   = isMobile ? H * 0.76 : H * 0.775
 
     const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
 
+    const fontSize = isMobile ? '16px' : '18px'
+    const subSize  = isMobile ? '11px' : '12px'
+    const textOffY = isMobile ? 8 : 10
+    const subOffY  = isMobile ? 10 : 13
+
     // LOW
     this.lowGfx = this.add.graphics()
-    this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, false, 'LOW')
-    this.lowText = this.add.text(leftX, this.btnY - 10, 'LOW', {
-      fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
+    this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, this.btnH, false, 'LOW')
+    this.lowText = this.add.text(leftX, this.btnY - textOffY, 'LOW', {
+      fontSize, fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5)
-    this.lowSub = this.add.text(leftX, this.btnY + 13, '1 - 5', {
-      fontSize: '12px', color: '#4B6EF5'
+    this.lowSub = this.add.text(leftX, this.btnY + subOffY, '1 - 5', {
+      fontSize: subSize, color: '#4B6EF5'
     }).setOrigin(0.5)
-    this.lowHit = this.add.rectangle(leftX, this.btnY, this.btnW, 64)
+    this.lowHit = this.add.rectangle(leftX, this.btnY, this.btnW, this.btnH)
       .setInteractive({ useHandCursor: true })
     this.lowHit.on('pointerdown', () => {
       if (this.isPlacing) return
@@ -235,14 +245,14 @@ export class GameScene extends Phaser.Scene {
 
     // HIGH
     this.highGfx = this.add.graphics()
-    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
-    this.highText = this.add.text(rightX, this.btnY - 10, 'HIGH', {
-      fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
+    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, this.btnH, false, 'HIGH')
+    this.highText = this.add.text(rightX, this.btnY - textOffY, 'HIGH', {
+      fontSize, fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5)
-    this.highSub = this.add.text(rightX, this.btnY + 13, '6 - 10', {
-      fontSize: '12px', color: '#FF3A2D'
+    this.highSub = this.add.text(rightX, this.btnY + subOffY, '6 - 10', {
+      fontSize: subSize, color: '#FF3A2D'
     }).setOrigin(0.5)
-    this.highHit = this.add.rectangle(rightX, this.btnY, this.btnW, 64)
+    this.highHit = this.add.rectangle(rightX, this.btnY, this.btnW, this.btnH)
       .setInteractive({ useHandCursor: true })
     this.highHit.on('pointerdown', () => {
       if (this.isPlacing) return
@@ -283,8 +293,8 @@ export class GameScene extends Phaser.Scene {
   private highlightPick(pick: 'HIGH' | 'LOW') {
     const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
-    this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, 64, pick === 'LOW',  'LOW')
-    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, pick === 'HIGH', 'HIGH')
+    this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, this.btnH, pick === 'LOW',  'LOW')
+    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, this.btnH, pick === 'HIGH', 'HIGH')
     this.lowText.setColor(pick === 'LOW'   ? '#4B6EF5' : '#ffffff')
     this.highText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
     this.lowSub.setColor(pick === 'LOW'    ? '#ffffff' : '#4B6EF5')
@@ -353,16 +363,9 @@ export class GameScene extends Phaser.Scene {
       return
     }
     this.isPlacing = true
-
-    // t=0ms: click sound ~60ms
     this.sound.play('click', { volume: 0.6 })
-
-    // t=0ms: start roll1 immediately so it's already playing smoothly
-    // before the backend responds — prevents audio stutter on PLAY tap
     this.rollSound = this.sound.add('roll1')
     this.rollSound.play({ volume: 0.3, loop: false })
-
-    // t=0ms: crosshair pulse while waiting for backend
     this.tweens.add({
       targets: this.crosshairContainer,
       alpha: 0.3,
@@ -371,7 +374,6 @@ export class GameScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut'
     })
-
     const clientSeed = Math.random().toString(36).substring(2)
     this.bridge.placeBet({
       game: 'SHARP_SHOOTER',
@@ -384,17 +386,10 @@ export class GameScene extends Phaser.Scene {
   private handleResult(result: BetResult) {
     const roll = (result.result as { roll: number }).roll
     this.currentBalance = result.newBalance
-
-    // Stop crosshair pulse
     this.tweens.killTweensOf(this.crosshairContainer)
     this.crosshairContainer.setAlpha(1)
-
-    // Resume audio context if suspended
     const ctx = (this.sound as any).context
     if (ctx?.state === 'suspended') ctx.resume()
-
-    // rollSound already started in placeBet() and is playing smoothly
-    // tick visuals are purely visual — no sound fired per tick
 
     const delays = [120, 110, 100, 90, 80, 70, 65, 60, 60, 65, 70, 80, 90, 110, 130]
     let elapsed = 0
@@ -402,40 +397,24 @@ export class GameScene extends Phaser.Scene {
     delays.forEach((delay, i) => {
       this.time.delayedCall(elapsed, () => {
         if (i < delays.length - 1) {
-          // Ticks 0–13: visual only
           this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
         } else {
-          // t=1170ms — FINAL REVEAL
-          // Stop roll1 cleanly before result sound plays
           if (this.rollSound?.isPlaying) this.rollSound.stop()
-
           this.numberDisplay.setText(String(roll))
-
-          // t=1170ms: bullseye flashes white
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFFFFFF, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-
-          // t=1270ms: settle color + win/loss sound — 100ms clean gap after roll stops
           this.time.delayedCall(100, () => {
             this.bullseye.clear()
             this.bullseye.fillStyle(result.win ? 0x00E676 : 0xFF4444, 1)
             this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-
             if (result.win) {
               this.sound.play('win', { volume: 0.8 })
               this.numberDisplay.setColor('#00E676')
-              this.tweens.add({
-                targets: this.numberDisplay,
-                scale: 1.4, duration: 150, yoyo: true
-              })
+              this.tweens.add({ targets: this.numberDisplay, scale: 1.4, duration: 150, yoyo: true })
               this.spotlight.clear()
-              ;[
-                { r: 20,  alpha: 0.30, color: 0x00E676 },
-                { r: 60,  alpha: 0.15, color: 0x00E676 },
-                { r: 120, alpha: 0.07, color: 0x00E676 },
-              ].forEach(({ r, alpha, color }) => {
-                this.spotlight.fillStyle(color, alpha)
+              ;[{ r: 20, a: 0.30 }, { r: 60, a: 0.15 }, { r: 120, a: 0.07 }].forEach(({ r, a }) => {
+                this.spotlight.fillStyle(0x00E676, a)
                 this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
               })
               ;[92, 72, 52, 32].forEach((r, ri) => {
@@ -443,12 +422,8 @@ export class GameScene extends Phaser.Scene {
                 ring.lineStyle(2, 0x00E676, 0.8)
                 ring.strokeCircle(this.dartboardCX, this.dartboardCY, r)
                 this.tweens.add({
-                  targets: ring,
-                  scaleX: 1.5, scaleY: 1.5,
-                  alpha: 0,
-                  duration: 600,
-                  delay: ri * 80,
-                  ease: 'Power2',
+                  targets: ring, scaleX: 1.5, scaleY: 1.5, alpha: 0,
+                  duration: 600, delay: ri * 80, ease: 'Power2',
                   onComplete: () => ring.destroy()
                 })
               })
@@ -457,18 +432,10 @@ export class GameScene extends Phaser.Scene {
               this.numberDisplay.setColor('#FF4444')
               this.cameras.main.shake(250, 0.006)
             }
-
-            // Screen flash fades over 350ms
             const flash = this.add.graphics().setDepth(20)
             flash.fillStyle(result.win ? 0x00E676 : 0xFF3A2D, 0.15)
             flash.fillRect(0, 0, this.scale.width, this.scale.height)
-            this.tweens.add({
-              targets: flash,
-              alpha: 0,
-              duration: 350,
-              onComplete: () => flash.destroy()
-            })
-
+            this.tweens.add({ targets: flash, alpha: 0, duration: 350, onComplete: () => flash.destroy() })
             this.showResultOverlay(result)
           })
         }
@@ -490,38 +457,20 @@ export class GameScene extends Phaser.Scene {
     this.overlayText
       .setText(result.win ? '🎯 WIN!' : 'MISS')
       .setColor(result.win ? '#FFD700' : '#FF3A2D')
-      .setVisible(true)
-      .setScale(0.5)
-      .setAlpha(1)
-
-    this.tweens.add({
-      targets: this.overlayText,
-      scale: 1,
-      duration: 300,
-      ease: 'Back.easeOut'
-    })
+      .setVisible(true).setScale(0.5).setAlpha(1)
+    this.tweens.add({ targets: this.overlayText, scale: 1, duration: 300, ease: 'Back.easeOut' })
 
     this.overlaySubText
-      .setText(result.win
-        ? '₦' + result.payout.toLocaleString()
-        : 'Better luck next time')
-      .setVisible(true)
-      .setAlpha(0)
-
-    this.tweens.add({
-      targets: this.overlaySubText,
-      alpha: 1,
-      duration: 400,
-      delay: 250,
-    })
+      .setText(result.win ? '₦' + result.payout.toLocaleString() : 'Better luck next time')
+      .setVisible(true).setAlpha(0)
+    this.tweens.add({ targets: this.overlaySubText, alpha: 1, duration: 400, delay: 250 })
 
     if (result.win) {
       for (let i = 0; i < 28; i++) {
         const p = this.add.graphics().setDepth(12)
         const colors = [0xFFD700, 0x00F0FF, 0x00E676, 0xFFFFFF, 0xFF3A2D]
         p.fillStyle(colors[Math.floor(Math.random() * colors.length)], 1)
-        const size = 2 + Math.random() * 4
-        p.fillCircle(0, 0, size)
+        p.fillCircle(0, 0, 2 + Math.random() * 4)
         p.setPosition(cx, this.dartboardCY)
         const angle = Math.random() * Math.PI * 2
         const dist  = 60 + Math.random() * 180
@@ -529,10 +478,8 @@ export class GameScene extends Phaser.Scene {
           targets: p,
           x: cx + Math.cos(angle) * dist,
           y: this.dartboardCY + Math.sin(angle) * dist,
-          alpha: 0,
-          scale: 0.2,
-          duration: 800 + Math.random() * 500,
-          ease: 'Power2',
+          alpha: 0, scale: 0.2,
+          duration: 800 + Math.random() * 500, ease: 'Power2',
           onComplete: () => p.destroy()
         })
       }
@@ -541,8 +488,7 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(result.win ? 2600 : 2000, () => {
       this.tweens.add({
         targets: [this.overlay, this.overlayText, this.overlaySubText],
-        alpha: 0,
-        duration: 300,
+        alpha: 0, duration: 300,
         onComplete: () => {
           this.overlay.setVisible(false).setAlpha(1)
           this.overlayText.setVisible(false).setAlpha(1)
@@ -556,8 +502,8 @@ export class GameScene extends Phaser.Scene {
           this.currentPick = null
           const leftX  = this.cx - this.btnGap - this.btnW / 2
           const rightX = this.cx + this.btnGap + this.btnW / 2
-          this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, 64, false, 'LOW')
-          this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
+          this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, this.btnH, false, 'LOW')
+          this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, this.btnH, false, 'HIGH')
           this.lowText.setColor('#ffffff')
           this.highText.setColor('#ffffff')
           this.lowSub.setColor('#4B6EF5')
@@ -584,7 +530,6 @@ export class GameScene extends Phaser.Scene {
     if (this.crosshairContainer) {
       this.crosshairContainer.rotation += 0.003
     }
-
     this.auroraTime += delta * 0.0004
     const W = this.scale.width
     const H = this.scale.height
@@ -602,7 +547,6 @@ export class GameScene extends Phaser.Scene {
       H * 0.55 + Math.sin(this.auroraTime * 0.6) * 25,
       W * 0.7, H * 0.4
     )
-
     this.glitchTimer += delta
     if (this.glitchTimer > 3000 + Math.random() * 4000) {
       this.glitchTimer = 0
