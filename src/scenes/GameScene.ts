@@ -34,8 +34,6 @@ export class GameScene extends Phaser.Scene {
   private titleGlitch2!: Phaser.GameObjects.Text
   private glitchTimer: number = 0
 
-  private bgMusicStarted: boolean = false
-
   public currentPick: 'HIGH' | 'LOW' | null = null
   public currentStake: number = 500
   public currentBalance: number = 0
@@ -46,17 +44,21 @@ export class GameScene extends Phaser.Scene {
   private btnY: number = 0
   private cx: number = 0
 
+  // Total roll duration in ms — used to time win/loss sound exactly at reveal
+  // delays array sums to: 120+110+100+90+80+70+65+60+60+65+70+80+90+110+130 = 1300ms
+  private readonly ROLL_TOTAL_MS = 1300
+
   constructor() {
     super('GameScene')
   }
 
   preload() {
-    this.load.audio('click', '/sounds/click.wav')
-    this.load.audio('select', '/sounds/select.wav')
-    this.load.audio('roll1', '/sounds/roll1.wav')
-    this.load.audio('roll2', '/sounds/roll2.wav')
-    this.load.audio('win', '/sounds/win.wav')
-    this.load.audio('loss', '/sounds/loss.wav')
+    this.load.audio('click',   '/sounds/click.wav')
+    this.load.audio('select',  '/sounds/select.wav')
+    this.load.audio('roll1',   '/sounds/roll1.wav')
+    this.load.audio('roll2',   '/sounds/roll2.wav')
+    this.load.audio('win',     '/sounds/win.wav')
+    this.load.audio('loss',    '/sounds/loss.wav')
     this.load.audio('bgmusic', '/sounds/background.mp3')
   }
 
@@ -99,20 +101,22 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    this.input.once('pointerdown', () => {
-      this.startBgMusic()
+    // Resume audio context immediately — parent page interaction already
+    // satisfied the browser autoplay policy before the iframe loaded
+    this.time.delayedCall(300, () => {
+      if (this.sound && (this.sound as any).context) {
+        (this.sound as any).context.resume().then(() => {
+          this.sound.play('bgmusic', { loop: true, volume: 0.12 })
+        }).catch(() => {
+          // Fallback: try playing directly
+          this.sound.play('bgmusic', { loop: true, volume: 0.12 })
+        })
+      } else {
+        this.sound.play('bgmusic', { loop: true, volume: 0.12 })
+      }
     })
 
     this.setupUI()
-  }
-
-  private startBgMusic() {
-    if (this.bgMusicStarted) return
-    this.bgMusicStarted = true
-    this.sound.play('bgmusic', {
-      loop: true,
-      volume: 0.12
-    })
   }
 
   private setupUI() {
@@ -207,7 +211,7 @@ export class GameScene extends Phaser.Scene {
     this.btnGap = Math.floor(W * 0.05)
     this.btnY = H * 0.775
 
-    const leftX = this.cx - this.btnGap - this.btnW / 2
+    const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
 
     // LOW
@@ -222,7 +226,8 @@ export class GameScene extends Phaser.Scene {
     this.lowHit = this.add.rectangle(leftX, this.btnY, this.btnW, 64)
       .setInteractive({ useHandCursor: true })
     this.lowHit.on('pointerdown', () => {
-      this.startBgMusic()
+      if (this.isPlacing) return
+      // select sound: plays at t=0, ~80ms duration, done before any other sound
       this.sound.play('select', { volume: 0.5 })
       this.currentPick = 'LOW'
       this.highlightPick('LOW')
@@ -244,7 +249,8 @@ export class GameScene extends Phaser.Scene {
     this.highHit = this.add.rectangle(rightX, this.btnY, this.btnW, 64)
       .setInteractive({ useHandCursor: true })
     this.highHit.on('pointerdown', () => {
-      this.startBgMusic()
+      if (this.isPlacing) return
+      // select sound: plays at t=0, ~80ms duration, done before any other sound
       this.sound.play('select', { volume: 0.5 })
       this.currentPick = 'HIGH'
       this.highlightPick('HIGH')
@@ -280,13 +286,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private highlightPick(pick: 'HIGH' | 'LOW') {
-    const leftX = this.cx - this.btnGap - this.btnW / 2
+    const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
-    this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, pick === 'LOW', 'LOW')
+    this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, 64, pick === 'LOW',  'LOW')
     this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, pick === 'HIGH', 'HIGH')
-    this.lowText.setColor(pick === 'LOW' ? '#4B6EF5' : '#ffffff')
+    this.lowText.setColor(pick === 'LOW'  ? '#4B6EF5' : '#ffffff')
     this.highText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
-    this.lowSub.setColor(pick === 'LOW' ? '#ffffff' : '#4B6EF5')
+    this.lowSub.setColor(pick === 'LOW'   ? '#ffffff' : '#4B6EF5')
     this.highSub.setColor(pick === 'HIGH' ? '#ffffff' : '#FF3A2D')
   }
 
@@ -301,10 +307,10 @@ export class GameScene extends Phaser.Scene {
   private drawDecorativeDots(W: number, H: number) {
     const dots = this.add.graphics()
     const positions = [
-      { x: 24, y: 24 }, { x: W - 24, y: 24 },
-      { x: 24, y: H - 24 }, { x: W - 24, y: H - 24 },
-      { x: W / 2, y: 24 }, { x: W / 2, y: H - 24 },
-      { x: 24, y: H / 2 }, { x: W - 24, y: H / 2 }
+      { x: 24,     y: 24     }, { x: W - 24, y: 24     },
+      { x: 24,     y: H - 24 }, { x: W - 24, y: H - 24 },
+      { x: W / 2,  y: 24     }, { x: W / 2,  y: H - 24 },
+      { x: 24,     y: H / 2  }, { x: W - 24, y: H / 2  }
     ]
     positions.forEach((pos, i) => {
       dots.fillStyle(i % 2 === 0 ? 0x00F0FF : 0xFFD700, 0.8)
@@ -353,8 +359,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.isPlacing = true
 
-    this.sound.play('click', { volume: 0.5 })
+    // t=0ms: click sound, short ~60ms, finishes before roll starts
+    this.sound.play('click', { volume: 0.6 })
 
+    // t=0ms: crosshair pulse starts while waiting for backend response
     this.tweens.add({
       targets: this.crosshairContainer,
       alpha: 0.3,
@@ -377,8 +385,38 @@ export class GameScene extends Phaser.Scene {
     const roll = (result.result as { roll: number }).roll
     this.currentBalance = result.newBalance
 
+    // Stop crosshair pulse immediately
     this.tweens.killTweensOf(this.crosshairContainer)
     this.crosshairContainer.setAlpha(1)
+
+    // Resume audio context in case it was suspended between interactions
+    if ((this.sound as any).context?.state === 'suspended') {
+      (this.sound as any).context.resume()
+    }
+
+    // Precise delay sequence (ms):
+    // tick 0:  t=0      roll1
+    // tick 1:  t=120    roll2
+    // tick 2:  t=230    roll1
+    // tick 3:  t=330    roll2
+    // tick 4:  t=420    roll1
+    // tick 5:  t=500    roll2
+    // tick 6:  t=570    roll1
+    // tick 7:  t=635    roll2
+    // tick 8:  t=695    roll1
+    // tick 9:  t=755    roll2
+    // tick 10: t=820    roll1
+    // tick 11: t=890    roll2
+    // tick 12: t=970    roll1
+    // tick 13: t=1060   roll2
+    // tick 14: t=1170   → FINAL REVEAL (no roll sound here)
+    // t=1170ms: number lands, bullseye flashes white
+    // t=1270ms: bullseye settles green/red + win/loss sound plays (100ms after land)
+    // t=1270ms: screen flash
+    // t=1270ms: overlay begins scale-in (300ms duration, done at t=1570ms)
+    // t=1520ms: subtext fades in (250ms delay after overlay start, done at ~t=1920ms)
+    // WIN:  overlay holds until t=1270+2600=3870ms then fades 300ms → reset at t=4170ms
+    // LOSS: overlay holds until t=1270+2000=3270ms then fades 300ms → reset at t=3570ms
 
     const delays = [120, 110, 100, 90, 80, 70, 65, 60, 60, 65, 70, 80, 90, 110, 130]
     let elapsed = 0
@@ -386,68 +424,82 @@ export class GameScene extends Phaser.Scene {
     delays.forEach((delay, i) => {
       this.time.delayedCall(elapsed, () => {
         if (i < delays.length - 1) {
+          // Roll ticks — alternate roll1/roll2, no overlap since each fires
+          // after previous delay has passed (minimum 60ms gap between ticks)
           this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
-          this.sound.play(i % 2 === 0 ? 'roll1' : 'roll2', { volume: 0.2 })
+          this.sound.play(i % 2 === 0 ? 'roll1' : 'roll2', { volume: 0.25 })
         } else {
+          // t=1170ms — final number reveal, NO roll sound here
           this.numberDisplay.setText(String(roll))
 
+          // t=1170ms: bullseye flashes white instantly
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFFFFFF, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+
+          // t=1270ms (100ms later): settle color + win/loss sound + flash + overlay
           this.time.delayedCall(100, () => {
+            // Bullseye settles
             this.bullseye.clear()
             this.bullseye.fillStyle(result.win ? 0x00E676 : 0xFF4444, 1)
             this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-          })
 
-          if (result.win) {
-            this.sound.play('win', { volume: 0.8 })
-            this.numberDisplay.setColor('#00E676')
-            this.tweens.add({
-              targets: this.numberDisplay,
-              scale: 1.4, duration: 150, yoyo: true
-            })
-            this.spotlight.clear()
-            const winLayers = [
-              { r: 20,  alpha: 0.30, color: 0x00E676 },
-              { r: 60,  alpha: 0.15, color: 0x00E676 },
-              { r: 120, alpha: 0.07, color: 0x00E676 },
-            ]
-            winLayers.forEach(({ r, alpha, color }) => {
-              this.spotlight.fillStyle(color, alpha)
-              this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
-            })
-            ;[92, 72, 52, 32].forEach((r, ri) => {
-              const ring = this.add.graphics().setDepth(8)
-              ring.lineStyle(2, 0x00E676, 0.8)
-              ring.strokeCircle(this.dartboardCX, this.dartboardCY, r)
+            if (result.win) {
+              // win sound at t=1270ms — ~1200ms duration, will be done before reset
+              this.sound.play('win', { volume: 0.8 })
+              this.numberDisplay.setColor('#00E676')
               this.tweens.add({
-                targets: ring,
-                scaleX: 1.5, scaleY: 1.5,
-                alpha: 0,
-                duration: 600,
-                delay: ri * 80,
-                ease: 'Power2',
-                onComplete: () => ring.destroy()
+                targets: this.numberDisplay,
+                scale: 1.4, duration: 150, yoyo: true
               })
+              // Green spotlight
+              this.spotlight.clear()
+              const winLayers = [
+                { r: 20,  alpha: 0.30, color: 0x00E676 },
+                { r: 60,  alpha: 0.15, color: 0x00E676 },
+                { r: 120, alpha: 0.07, color: 0x00E676 },
+              ]
+              winLayers.forEach(({ r, alpha, color }) => {
+                this.spotlight.fillStyle(color, alpha)
+                this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
+              })
+              // Ring ripples staggered: t=1270, t=1350, t=1430, t=1510ms
+              ;[92, 72, 52, 32].forEach((r, ri) => {
+                const ring = this.add.graphics().setDepth(8)
+                ring.lineStyle(2, 0x00E676, 0.8)
+                ring.strokeCircle(this.dartboardCX, this.dartboardCY, r)
+                this.tweens.add({
+                  targets: ring,
+                  scaleX: 1.5, scaleY: 1.5,
+                  alpha: 0,
+                  duration: 600,
+                  delay: ri * 80,
+                  ease: 'Power2',
+                  onComplete: () => ring.destroy()
+                })
+              })
+            } else {
+              // loss sound at t=1270ms — ~800ms duration, done before reset
+              this.sound.play('loss', { volume: 0.7 })
+              this.numberDisplay.setColor('#FF4444')
+              // Camera shake: 250ms duration, done at t=1520ms
+              this.cameras.main.shake(250, 0.006)
+            }
+
+            // Screen flash at t=1270ms — fades over 350ms, done at t=1620ms
+            const flash = this.add.graphics().setDepth(20)
+            flash.fillStyle(result.win ? 0x00E676 : 0xFF3A2D, 0.15)
+            flash.fillRect(0, 0, this.scale.width, this.scale.height)
+            this.tweens.add({
+              targets: flash,
+              alpha: 0,
+              duration: 350,
+              onComplete: () => flash.destroy()
             })
-          } else {
-            this.sound.play('loss', { volume: 0.6 })
-            this.numberDisplay.setColor('#FF4444')
-            this.cameras.main.shake(250, 0.006)
-          }
 
-          const flash = this.add.graphics().setDepth(20)
-          flash.fillStyle(result.win ? 0x00E676 : 0xFF3A2D, 0.15)
-          flash.fillRect(0, 0, this.scale.width, this.scale.height)
-          this.tweens.add({
-            targets: flash,
-            alpha: 0,
-            duration: 350,
-            onComplete: () => flash.destroy()
+            // Overlay starts at t=1270ms
+            this.showResultOverlay(result)
           })
-
-          this.showResultOverlay(result)
         }
       })
       elapsed += delay
@@ -455,15 +507,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showResultOverlay(result: BetResult) {
-    const W = this.scale.width
-    const H = this.scale.height
+    const W  = this.scale.width
+    const H  = this.scale.height
     const cx = W / 2
 
+    // Background overlay — instant
     this.overlay.clear()
     this.overlay.fillStyle(result.win ? 0x001a00 : 0x1a0000, 0.92)
     this.overlay.fillRect(0, 0, W, H)
     this.overlay.setVisible(true)
 
+    // WIN/MISS text scales in over 300ms — done at t=1570ms
     this.overlayText
       .setText(result.win ? '🎯 WIN!' : 'MISS')
       .setColor(result.win ? '#FFD700' : '#FF3A2D')
@@ -478,8 +532,11 @@ export class GameScene extends Phaser.Scene {
       ease: 'Back.easeOut'
     })
 
+    // Subtext fades in starting at t=1520ms (250ms delay), done at t=1920ms
     this.overlaySubText
-      .setText(result.win ? '₦' + result.payout.toLocaleString() : 'Better luck next time')
+      .setText(result.win
+        ? '₦' + result.payout.toLocaleString()
+        : 'Better luck next time')
       .setVisible(true)
       .setAlpha(0)
 
@@ -490,6 +547,7 @@ export class GameScene extends Phaser.Scene {
       delay: 250,
     })
 
+    // Win particles burst — 28 particles from dartboard center
     if (result.win) {
       for (let i = 0; i < 28; i++) {
         const p = this.add.graphics().setDepth(12)
@@ -499,7 +557,7 @@ export class GameScene extends Phaser.Scene {
         p.fillCircle(0, 0, size)
         p.setPosition(cx, this.dartboardCY)
         const angle = Math.random() * Math.PI * 2
-        const dist = 60 + Math.random() * 180
+        const dist  = 60 + Math.random() * 180
         this.tweens.add({
           targets: p,
           x: cx + Math.cos(angle) * dist,
@@ -513,6 +571,10 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // WIN: overlay holds for 2600ms from t=1270ms → fades at t=3870ms, reset at t=4170ms
+    // LOSS: overlay holds for 2000ms from t=1270ms → fades at t=3270ms, reset at t=3570ms
+    // win sound (~1200ms) finishes well before reset at t=4170ms ✓
+    // loss sound (~800ms) finishes well before reset at t=3570ms ✓
     this.time.delayedCall(result.win ? 2600 : 2000, () => {
       this.tweens.add({
         targets: [this.overlay, this.overlayText, this.overlaySubText],
@@ -529,9 +591,9 @@ export class GameScene extends Phaser.Scene {
           this.drawSpotlight(this.dartboardCX, this.dartboardCY)
           this.isPlacing = false
           this.currentPick = null
-          const leftX = this.cx - this.btnGap - this.btnW / 2
+          const leftX  = this.cx - this.btnGap - this.btnW / 2
           const rightX = this.cx + this.btnGap + this.btnW / 2
-          this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, false, 'LOW')
+          this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, 64, false, 'LOW')
           this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
           this.lowText.setColor('#ffffff')
           this.highText.setColor('#ffffff')
@@ -567,7 +629,7 @@ export class GameScene extends Phaser.Scene {
     this.aurora1.fillStyle(0x00F0FF, 0.035)
     this.aurora1.fillEllipse(
       W * 0.25 + Math.sin(this.auroraTime) * 40,
-      H * 0.3 + Math.cos(this.auroraTime * 0.7) * 30,
+      H * 0.3  + Math.cos(this.auroraTime * 0.7) * 30,
       W * 0.8, H * 0.5
     )
     this.aurora2.clear()
