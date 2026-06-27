@@ -34,6 +34,9 @@ export class GameScene extends Phaser.Scene {
   private titleGlitch2!: Phaser.GameObjects.Text
   private glitchTimer: number = 0
 
+  // Stored roll sound reference so we can stop it precisely
+  private rollSound!: Phaser.Sound.BaseSound
+
   public currentPick: 'HIGH' | 'LOW' | null = null
   public currentStake: number = 500
   public currentBalance: number = 0
@@ -44,10 +47,6 @@ export class GameScene extends Phaser.Scene {
   private btnY: number = 0
   private cx: number = 0
 
-  // Total roll duration in ms — used to time win/loss sound exactly at reveal
-  // delays array sums to: 120+110+100+90+80+70+65+60+60+65+70+80+90+110+130 = 1300ms
-  
-
   constructor() {
     super('GameScene')
   }
@@ -56,7 +55,6 @@ export class GameScene extends Phaser.Scene {
     this.load.audio('click',   '/sounds/click.wav')
     this.load.audio('select',  '/sounds/select.wav')
     this.load.audio('roll1',   '/sounds/roll1.wav')
-    this.load.audio('roll2',   '/sounds/roll2.wav')
     this.load.audio('win',     '/sounds/win.wav')
     this.load.audio('loss',    '/sounds/loss.wav')
     this.load.audio('bgmusic', '/sounds/background.mp3')
@@ -84,6 +82,8 @@ export class GameScene extends Phaser.Scene {
       this.isPlacing = false
       this.tweens.killTweensOf(this.crosshairContainer)
       this.crosshairContainer.setAlpha(1)
+      // Stop roll sound if still playing on error
+      if (this.rollSound?.isPlaying) this.rollSound.stop()
       window.parent.postMessage(
         { type: 'BET_DONE', payload: {} },
         this.PARENT_ORIGIN
@@ -101,14 +101,13 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    // Resume audio context immediately — parent page interaction already
-    // satisfied the browser autoplay policy before the iframe loaded
+    // Start music immediately — parent page interaction already unlocked audio context
     this.time.delayedCall(300, () => {
-      if (this.sound && (this.sound as any).context) {
-        (this.sound as any).context.resume().then(() => {
+      const ctx = (this.sound as any).context
+      if (ctx) {
+        ctx.resume().then(() => {
           this.sound.play('bgmusic', { loop: true, volume: 0.12 })
         }).catch(() => {
-          // Fallback: try playing directly
           this.sound.play('bgmusic', { loop: true, volume: 0.12 })
         })
       } else {
@@ -227,7 +226,6 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.lowHit.on('pointerdown', () => {
       if (this.isPlacing) return
-      // select sound: plays at t=0, ~80ms duration, done before any other sound
       this.sound.play('select', { volume: 0.5 })
       this.currentPick = 'LOW'
       this.highlightPick('LOW')
@@ -250,7 +248,6 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.highHit.on('pointerdown', () => {
       if (this.isPlacing) return
-      // select sound: plays at t=0, ~80ms duration, done before any other sound
       this.sound.play('select', { volume: 0.5 })
       this.currentPick = 'HIGH'
       this.highlightPick('HIGH')
@@ -290,10 +287,10 @@ export class GameScene extends Phaser.Scene {
     const rightX = this.cx + this.btnGap + this.btnW / 2
     this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, 64, pick === 'LOW',  'LOW')
     this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, pick === 'HIGH', 'HIGH')
-    this.lowText.setColor(pick === 'LOW'  ? '#4B6EF5' : '#ffffff')
+    this.lowText.setColor(pick === 'LOW'   ? '#4B6EF5' : '#ffffff')
     this.highText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
-    this.lowSub.setColor(pick === 'LOW'   ? '#ffffff' : '#4B6EF5')
-    this.highSub.setColor(pick === 'HIGH' ? '#ffffff' : '#FF3A2D')
+    this.lowSub.setColor(pick === 'LOW'    ? '#ffffff' : '#4B6EF5')
+    this.highSub.setColor(pick === 'HIGH'  ? '#ffffff' : '#FF3A2D')
   }
 
   private drawGrid(W: number, H: number) {
@@ -359,10 +356,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.isPlacing = true
 
-    // t=0ms: click sound, short ~60ms, finishes before roll starts
+    // t=0ms: click sound ~60ms, finishes before roll starts
     this.sound.play('click', { volume: 0.6 })
 
-    // t=0ms: crosshair pulse starts while waiting for backend response
+    // t=0ms: crosshair pulse while waiting for backend
     this.tweens.add({
       targets: this.crosshairContainer,
       alpha: 0.3,
@@ -385,85 +382,65 @@ export class GameScene extends Phaser.Scene {
     const roll = (result.result as { roll: number }).roll
     this.currentBalance = result.newBalance
 
-    // Stop crosshair pulse immediately
+    // Stop crosshair pulse
     this.tweens.killTweensOf(this.crosshairContainer)
     this.crosshairContainer.setAlpha(1)
 
-    // Resume audio context in case it was suspended between interactions
-    if ((this.sound as any).context?.state === 'suspended') {
-      (this.sound as any).context.resume()
-    }
+    // Resume audio context if suspended between interactions
+    const ctx = (this.sound as any).context
+    if (ctx?.state === 'suspended') ctx.resume()
 
-    // Precise delay sequence (ms):
-    // tick 0:  t=0      roll1
-    // tick 1:  t=120    roll2
-    // tick 2:  t=230    roll1
-    // tick 3:  t=330    roll2
-    // tick 4:  t=420    roll1
-    // tick 5:  t=500    roll2
-    // tick 6:  t=570    roll1
-    // tick 7:  t=635    roll2
-    // tick 8:  t=695    roll1
-    // tick 9:  t=755    roll2
-    // tick 10: t=820    roll1
-    // tick 11: t=890    roll2
-    // tick 12: t=970    roll1
-    // tick 13: t=1060   roll2
-    // tick 14: t=1170   → FINAL REVEAL (no roll sound here)
-    // t=1170ms: number lands, bullseye flashes white
-    // t=1270ms: bullseye settles green/red + win/loss sound plays (100ms after land)
-    // t=1270ms: screen flash
-    // t=1270ms: overlay begins scale-in (300ms duration, done at t=1570ms)
-    // t=1520ms: subtext fades in (250ms delay after overlay start, done at ~t=1920ms)
-    // WIN:  overlay holds until t=1270+2600=3870ms then fades 300ms → reset at t=4170ms
-    // LOSS: overlay holds until t=1270+2000=3270ms then fades 300ms → reset at t=3570ms
+    // Play roll1 ONCE as a single continuous sound for the entire roll duration
+    // It will be stopped precisely at the final reveal tick — no overlap, no bleed
+    this.rollSound = this.sound.add('roll1')
+    this.rollSound.play({ volume: 0.3, loop: false })
 
+    // Number tick sequence — visual only, no sound fired per tick
+    // Timing (ms): 0, 120, 230, 330, 420, 500, 570, 635, 695, 755, 820, 890, 970, 1060, 1170
     const delays = [120, 110, 100, 90, 80, 70, 65, 60, 60, 65, 70, 80, 90, 110, 130]
     let elapsed = 0
 
     delays.forEach((delay, i) => {
       this.time.delayedCall(elapsed, () => {
         if (i < delays.length - 1) {
-          // Roll ticks — alternate roll1/roll2, no overlap since each fires
-          // after previous delay has passed (minimum 60ms gap between ticks)
+          // Ticks 0–13: update number display only, roll1 is already playing
           this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
-          this.sound.play(i % 2 === 0 ? 'roll1' : 'roll2', { volume: 0.25 })
         } else {
-          // t=1170ms — final number reveal, NO roll sound here
+          // t=1170ms — FINAL REVEAL
+          // Stop roll1 immediately and cleanly before any result sound
+          if (this.rollSound?.isPlaying) this.rollSound.stop()
+
           this.numberDisplay.setText(String(roll))
 
-          // t=1170ms: bullseye flashes white instantly
+          // t=1170ms: bullseye flashes white
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFFFFFF, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
 
-          // t=1270ms (100ms later): settle color + win/loss sound + flash + overlay
+          // t=1270ms (100ms later): settle + win/loss sound — clean air guaranteed
           this.time.delayedCall(100, () => {
-            // Bullseye settles
             this.bullseye.clear()
             this.bullseye.fillStyle(result.win ? 0x00E676 : 0xFF4444, 1)
             this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
 
             if (result.win) {
-              // win sound at t=1270ms — ~1200ms duration, will be done before reset
+              // win.wav at t=1270ms — roll1 stopped 100ms ago, clean start
               this.sound.play('win', { volume: 0.8 })
               this.numberDisplay.setColor('#00E676')
               this.tweens.add({
                 targets: this.numberDisplay,
                 scale: 1.4, duration: 150, yoyo: true
               })
-              // Green spotlight
               this.spotlight.clear()
-              const winLayers = [
+              ;[
                 { r: 20,  alpha: 0.30, color: 0x00E676 },
                 { r: 60,  alpha: 0.15, color: 0x00E676 },
                 { r: 120, alpha: 0.07, color: 0x00E676 },
-              ]
-              winLayers.forEach(({ r, alpha, color }) => {
+              ].forEach(({ r, alpha, color }) => {
                 this.spotlight.fillStyle(color, alpha)
                 this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
               })
-              // Ring ripples staggered: t=1270, t=1350, t=1430, t=1510ms
+              // Ring ripples staggered: t=1270, 1350, 1430, 1510ms
               ;[92, 72, 52, 32].forEach((r, ri) => {
                 const ring = this.add.graphics().setDepth(8)
                 ring.lineStyle(2, 0x00E676, 0.8)
@@ -479,14 +456,14 @@ export class GameScene extends Phaser.Scene {
                 })
               })
             } else {
-              // loss sound at t=1270ms — ~800ms duration, done before reset
+              // loss.wav at t=1270ms — roll1 stopped 100ms ago, clean start
               this.sound.play('loss', { volume: 0.7 })
               this.numberDisplay.setColor('#FF4444')
-              // Camera shake: 250ms duration, done at t=1520ms
+              // Camera shake 250ms, done at t=1520ms
               this.cameras.main.shake(250, 0.006)
             }
 
-            // Screen flash at t=1270ms — fades over 350ms, done at t=1620ms
+            // Screen flash at t=1270ms, fades over 350ms → done t=1620ms
             const flash = this.add.graphics().setDepth(20)
             flash.fillStyle(result.win ? 0x00E676 : 0xFF3A2D, 0.15)
             flash.fillRect(0, 0, this.scale.width, this.scale.height)
@@ -497,7 +474,6 @@ export class GameScene extends Phaser.Scene {
               onComplete: () => flash.destroy()
             })
 
-            // Overlay starts at t=1270ms
             this.showResultOverlay(result)
           })
         }
@@ -511,13 +487,12 @@ export class GameScene extends Phaser.Scene {
     const H  = this.scale.height
     const cx = W / 2
 
-    // Background overlay — instant
     this.overlay.clear()
     this.overlay.fillStyle(result.win ? 0x001a00 : 0x1a0000, 0.92)
     this.overlay.fillRect(0, 0, W, H)
     this.overlay.setVisible(true)
 
-    // WIN/MISS text scales in over 300ms — done at t=1570ms
+    // WIN/MISS scales in over 300ms → done t=1570ms
     this.overlayText
       .setText(result.win ? '🎯 WIN!' : 'MISS')
       .setColor(result.win ? '#FFD700' : '#FF3A2D')
@@ -532,7 +507,7 @@ export class GameScene extends Phaser.Scene {
       ease: 'Back.easeOut'
     })
 
-    // Subtext fades in starting at t=1520ms (250ms delay), done at t=1920ms
+    // Subtext fades in at t=1520ms (250ms delay), done t=1920ms
     this.overlaySubText
       .setText(result.win
         ? '₦' + result.payout.toLocaleString()
@@ -547,7 +522,6 @@ export class GameScene extends Phaser.Scene {
       delay: 250,
     })
 
-    // Win particles burst — 28 particles from dartboard center
     if (result.win) {
       for (let i = 0; i < 28; i++) {
         const p = this.add.graphics().setDepth(12)
@@ -571,10 +545,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // WIN: overlay holds for 2600ms from t=1270ms → fades at t=3870ms, reset at t=4170ms
-    // LOSS: overlay holds for 2000ms from t=1270ms → fades at t=3270ms, reset at t=3570ms
-    // win sound (~1200ms) finishes well before reset at t=4170ms ✓
-    // loss sound (~800ms) finishes well before reset at t=3570ms ✓
+    // WIN: holds 2600ms → fades 300ms → reset at ~t=4170ms (win.wav ~1200ms done ✓)
+    // LOSS: holds 2000ms → fades 300ms → reset at ~t=3570ms (loss.wav ~800ms done ✓)
     this.time.delayedCall(result.win ? 2600 : 2000, () => {
       this.tweens.add({
         targets: [this.overlay, this.overlayText, this.overlaySubText],
