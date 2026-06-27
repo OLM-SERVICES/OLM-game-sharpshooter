@@ -101,6 +101,7 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
+    // Start music immediately — parent page interaction already unlocked audio context
     this.time.delayedCall(300, () => {
       const ctx = (this.sound as any).context
       if (ctx) {
@@ -142,7 +143,7 @@ export class GameScene extends Phaser.Scene {
     this.createGlitchTitle(this.cx, isMobile ? 20 : 28)
 
     this.add.text(this.cx, isMobile ? 38 : 58, 'HIGH OR LOW · HIT THE TARGET', {
-      fontSize: '10px', color: '#00F0FF'
+      fontSize: '10px', color: '#00F0FF', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
 
     this.createDartboard(this.cx, this.dartboardCY)
@@ -195,23 +196,26 @@ export class GameScene extends Phaser.Scene {
   private createGlitchTitle(cx: number, y: number) {
     const style = {
       fontSize: '20px', fontStyle: 'bold',
+      fontFamily: 'Arial, sans-serif',
       color: '#ffffff', stroke: '#00F0FF', strokeThickness: 1
     }
     this.titleGlitch1 = this.add.text(cx - 2, y, 'SHARP SHOOTER', {
       ...style, color: '#FF3A2D', stroke: '#FF3A2D', strokeThickness: 0
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
+
     this.titleGlitch2 = this.add.text(cx + 2, y, 'SHARP SHOOTER', {
       ...style, color: '#00F0FF', stroke: '#00F0FF', strokeThickness: 0
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
+
     this.add.text(cx, y, 'SHARP SHOOTER', style)
-      .setOrigin(0.5).setDepth(2)
+      .setOrigin(0.5).setDepth(2);
   }
 
-  private createPickButtons(W: number, H: number, isMobile: boolean = false) {
-    this.btnH   = isMobile ? 52 : 64
-    this.btnW   = isMobile ? Math.floor(W * 0.43) : Math.floor(W * 0.40)
-    this.btnGap = Math.floor(W * 0.04)
-    this.btnY   = isMobile ? H * 0.76 : H * 0.775
+  private createPickButtons(W: number, H: number, isMobile: boolean = false): void {
+    this.btnH   = isMobile ? 52 : 64;
+    this.btnW   = isMobile ? Math.floor(W * 0.43) : Math.floor(W * 0.40);
+    this.btnGap = Math.floor(W * 0.04);
+    this.btnY   = isMobile ? H * 0.76 : H * 0.775;
 
     const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
@@ -363,9 +367,15 @@ export class GameScene extends Phaser.Scene {
       return
     }
     this.isPlacing = true
+
+    // t=0ms: click sound ~60ms
     this.sound.play('click', { volume: 0.6 })
+
+    // t=0ms: start roll1 immediately so it plays smoothly before backend responds
+    // prevents audio stutter between PLAY tap and first tick
     this.rollSound = this.sound.add('roll1')
     this.rollSound.play({ volume: 0.3, loop: false })
+
     this.tweens.add({
       targets: this.crosshairContainer,
       alpha: 0.3,
@@ -374,6 +384,7 @@ export class GameScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut'
     })
+
     const clientSeed = Math.random().toString(36).substring(2)
     this.bridge.placeBet({
       game: 'SHARP_SHOOTER',
@@ -388,8 +399,13 @@ export class GameScene extends Phaser.Scene {
     this.currentBalance = result.newBalance
     this.tweens.killTweensOf(this.crosshairContainer)
     this.crosshairContainer.setAlpha(1)
+
+    // Resume audio context if suspended between interactions
     const ctx = (this.sound as any).context
     if (ctx?.state === 'suspended') ctx.resume()
+
+    // rollSound already started in placeBet() and playing smoothly
+    // tick visuals are purely visual — no sound fired per tick
 
     const delays = [120, 110, 100, 90, 80, 70, 65, 60, 60, 65, 70, 80, 90, 110, 130]
     let elapsed = 0
@@ -397,13 +413,19 @@ export class GameScene extends Phaser.Scene {
     delays.forEach((delay, i) => {
       this.time.delayedCall(elapsed, () => {
         if (i < delays.length - 1) {
+          // Ticks 0–13: visual only
           this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
         } else {
+          // t=1170ms — FINAL REVEAL
+          // Stop roll1 cleanly before result sound plays
           if (this.rollSound?.isPlaying) this.rollSound.stop()
+
           this.numberDisplay.setText(String(roll))
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFFFFFF, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+
+          // t=1270ms: 100ms clean gap after roll stops, then result sound
           this.time.delayedCall(100, () => {
             this.bullseye.clear()
             this.bullseye.fillStyle(result.win ? 0x00E676 : 0xFF4444, 1)
