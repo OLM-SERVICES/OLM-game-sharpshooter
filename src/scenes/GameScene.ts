@@ -62,6 +62,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    // FIX: Prevent Phaser from pausing audio when the iframe loses focus (blur event)
+    this.sound.pauseOnBlur = false
+
     this.PARENT_ORIGIN = import.meta.env.VITE_PARENT_ORIGIN || '*'
     this.bridge = new CasinoBridge(this.PARENT_ORIGIN)
 
@@ -399,10 +402,6 @@ export class GameScene extends Phaser.Scene {
     this.currentBalance = result.newBalance
     this.tweens.killTweensOf(this.crosshairContainer)
     this.crosshairContainer.setAlpha(1)
-
-    // Resume audio context if suspended between interactions
-    const ctx = (this.sound as any).context
-    if (ctx?.state === 'suspended') ctx.resume()
 
     // rollSound already started in placeBet() and playing smoothly
     // tick visuals are purely visual — no sound fired per tick
