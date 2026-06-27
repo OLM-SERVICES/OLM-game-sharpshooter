@@ -21,19 +21,21 @@ export class GameScene extends Phaser.Scene {
   private highText!: Phaser.GameObjects.Text
   private lowSub!: Phaser.GameObjects.Text
   private highSub!: Phaser.GameObjects.Text
+  private lowHit!: Phaser.GameObjects.Rectangle
+  private highHit!: Phaser.GameObjects.Rectangle
 
-  // Aurora background graphics
   private aurora1!: Phaser.GameObjects.Graphics
   private aurora2!: Phaser.GameObjects.Graphics
   private auroraTime: number = 0
 
-  // Spotlight
   private spotlight!: Phaser.GameObjects.Graphics
 
-  // Glitch title
+  private titleMain!: Phaser.GameObjects.Text
   private titleGlitch1!: Phaser.GameObjects.Text
   private titleGlitch2!: Phaser.GameObjects.Text
   private glitchTimer: number = 0
+
+  private bgMusicStarted: boolean = false
 
   public currentPick: 'HIGH' | 'LOW' | null = null
   public currentStake: number = 500
@@ -49,7 +51,15 @@ export class GameScene extends Phaser.Scene {
     super('GameScene')
   }
 
-  preload() {}
+  preload() {
+    this.load.audio('click', '/sounds/click.wav')
+    this.load.audio('select', '/sounds/select.wav')
+    this.load.audio('roll1', '/sounds/roll1.wav')
+    this.load.audio('roll2', '/sounds/roll2.wav')
+    this.load.audio('win', '/sounds/win.wav')
+    this.load.audio('loss', '/sounds/loss.wav')
+    this.load.audio('bgmusic', '/sounds/background.mp3')
+  }
 
   create() {
     this.PARENT_ORIGIN = import.meta.env.VITE_PARENT_ORIGIN || '*'
@@ -71,6 +81,8 @@ export class GameScene extends Phaser.Scene {
     this.bridge.onErr((message) => {
       this.showError(message)
       this.isPlacing = false
+      this.tweens.killTweensOf(this.crosshairContainer)
+      this.crosshairContainer.setAlpha(1)
       window.parent.postMessage(
         { type: 'BET_DONE', payload: {} },
         this.PARENT_ORIGIN
@@ -88,7 +100,21 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
+    // Start background music on first user interaction (browser autoplay policy)
+    this.input.once('pointerdown', () => {
+      this.startBgMusic()
+    })
+
     this.setupUI()
+  }
+
+  private startBgMusic() {
+    if (this.bgMusicStarted) return
+    this.bgMusicStarted = true
+    this.sound.play('bgmusic', {
+      loop: true,
+      volume: 0.12
+    })
   }
 
   private setupUI() {
@@ -101,30 +127,24 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor('#05001A')
 
-    // Aurora background (Reactbits Aurora effect in Phaser)
     this.aurora1 = this.add.graphics()
     this.aurora2 = this.add.graphics()
     this.drawAurora(W, H)
 
-    // Grid on top of aurora
     this.drawGrid(W, H)
     this.drawDecorativeDots(W, H)
 
-    // Spotlight behind dartboard (Reactbits Spotlight effect)
     this.spotlight = this.add.graphics()
-    this.drawSpotlight(this.cx, this.dartboardCY, W)
+    this.drawSpotlight(this.cx, this.dartboardCY)
 
-    // Glitch title (Reactbits GlitchText effect)
     this.createGlitchTitle(this.cx, 28)
 
     this.add.text(this.cx, 58, 'HIGH OR LOW · HIT THE TARGET', {
       fontSize: '10px', color: '#00F0FF'
     }).setOrigin(0.5)
 
-    // Dartboard
     this.createDartboard(this.cx, this.dartboardCY)
 
-    // Multiplier
     this.add.text(this.cx, this.dartboardCY + 112, '1.80×', {
       fontSize: '20px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5)
@@ -132,10 +152,8 @@ export class GameScene extends Phaser.Scene {
       fontSize: '10px', color: '#444444'
     }).setOrigin(0.5)
 
-    // Pick buttons
     this.createPickButtons(W, H)
 
-    // Overlays
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
     this.overlayText = this.add.text(this.cx, H / 2 - 40, '', {
       fontSize: '56px', fontStyle: 'bold', color: '#FFD700'
@@ -147,54 +165,45 @@ export class GameScene extends Phaser.Scene {
     this.scale.on('resize', () => { this.scene.restart() })
   }
 
-  // ── Aurora background (animated blobs like Reactbits Aurora) ──────────────
   private drawAurora(W: number, H: number) {
-    // Blob 1 — cyan/blue
     this.aurora1.clear()
     this.aurora1.fillStyle(0x00F0FF, 0.04)
     this.aurora1.fillEllipse(W * 0.25, H * 0.3, W * 0.8, H * 0.5)
-
-    // Blob 2 — purple
     this.aurora2.clear()
     this.aurora2.fillStyle(0x4B00FF, 0.05)
     this.aurora2.fillEllipse(W * 0.75, H * 0.5, W * 0.7, H * 0.4)
   }
 
-  // ── Spotlight beam behind dartboard (Reactbits Spotlight) ─────────────────
-  private drawSpotlight(cx: number, cy: number, _W: number) {
+  private drawSpotlight(cx: number, cy: number) {
     this.spotlight.clear()
-    const colors = [
+    const layers = [
       { r: 20,  alpha: 0.25, color: 0x00F0FF },
       { r: 50,  alpha: 0.12, color: 0x4B6EF5 },
       { r: 90,  alpha: 0.07, color: 0x00F0FF },
       { r: 140, alpha: 0.04, color: 0x4B00FF },
       { r: 200, alpha: 0.02, color: 0x4B00FF },
     ]
-    colors.forEach(({ r, alpha, color }) => {
+    layers.forEach(({ r, alpha, color }) => {
       this.spotlight.fillStyle(color, alpha)
       this.spotlight.fillCircle(cx, cy, r)
     })
   }
 
-  // ── Glitch title (Reactbits GlitchText) ───────────────────────────────────
   private createGlitchTitle(cx: number, y: number) {
-    const style = { fontSize: '20px', fontStyle: 'bold', color: '#ffffff', stroke: '#00F0FF', strokeThickness: 1 }
-
-    // Glitch layers (offset clones)
+    const style = {
+      fontSize: '20px', fontStyle: 'bold',
+      color: '#ffffff', stroke: '#00F0FF', strokeThickness: 1
+    }
     this.titleGlitch1 = this.add.text(cx - 2, y, 'SHARP SHOOTER', {
       ...style, color: '#FF3A2D', stroke: '#FF3A2D', strokeThickness: 0
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
-
     this.titleGlitch2 = this.add.text(cx + 2, y, 'SHARP SHOOTER', {
       ...style, color: '#00F0FF', stroke: '#00F0FF', strokeThickness: 0
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
-
-    // Main title on top
-    this.add.text(cx, y, 'SHARP SHOOTER', style)
+    this.titleMain = this.add.text(cx, y, 'SHARP SHOOTER', style)
       .setOrigin(0.5).setDepth(2)
   }
 
-  // ── Pick buttons ──────────────────────────────────────────────────────────
   private createPickButtons(W: number, H: number) {
     this.btnW = Math.floor(W * 0.40)
     this.btnGap = Math.floor(W * 0.05)
@@ -203,45 +212,49 @@ export class GameScene extends Phaser.Scene {
     const leftX = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
 
-    // LOW button
+    // LOW
     this.lowGfx = this.add.graphics()
     this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, false, 'LOW')
-    this.lowGfx.setInteractive(
-      new Phaser.Geom.Rectangle(leftX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
-      Phaser.Geom.Rectangle.Contains
-    )
-    this.lowGfx.on('pointerdown', () => {
-      this.currentPick = 'LOW'
-      this.highlightPick('LOW')
-      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN)
-    })
-
     this.lowText = this.add.text(leftX, this.btnY - 10, 'LOW', {
       fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5)
     this.lowSub = this.add.text(leftX, this.btnY + 13, '1 - 5', {
       fontSize: '12px', color: '#4B6EF5'
     }).setOrigin(0.5)
-
-    // HIGH button
-    this.highGfx = this.add.graphics()
-    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
-    this.highGfx.setInteractive(
-      new Phaser.Geom.Rectangle(rightX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
-      Phaser.Geom.Rectangle.Contains
-    )
-    this.highGfx.on('pointerdown', () => {
-      this.currentPick = 'HIGH'
-      this.highlightPick('HIGH')
-      window.parent.postMessage({ type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN)
+    this.lowHit = this.add.rectangle(leftX, this.btnY, this.btnW, 64)
+      .setInteractive({ useHandCursor: true })
+    this.lowHit.on('pointerdown', () => {
+      this.startBgMusic()
+      this.sound.play('select', { volume: 0.5 })
+      this.currentPick = 'LOW'
+      this.highlightPick('LOW')
+      window.parent.postMessage(
+        { type: 'PICK_SELECTED', payload: { pick: 'LOW' } },
+        this.PARENT_ORIGIN
+      )
     })
 
+    // HIGH
+    this.highGfx = this.add.graphics()
+    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
     this.highText = this.add.text(rightX, this.btnY - 10, 'HIGH', {
       fontSize: '18px', fontStyle: 'bold', color: '#ffffff'
     }).setOrigin(0.5)
     this.highSub = this.add.text(rightX, this.btnY + 13, '6 - 10', {
       fontSize: '12px', color: '#FF3A2D'
     }).setOrigin(0.5)
+    this.highHit = this.add.rectangle(rightX, this.btnY, this.btnW, 64)
+      .setInteractive({ useHandCursor: true })
+    this.highHit.on('pointerdown', () => {
+      this.startBgMusic()
+      this.sound.play('select', { volume: 0.5 })
+      this.currentPick = 'HIGH'
+      this.highlightPick('HIGH')
+      window.parent.postMessage(
+        { type: 'PICK_SELECTED', payload: { pick: 'HIGH' } },
+        this.PARENT_ORIGIN
+      )
+    })
   }
 
   private drawPickBtn(
@@ -256,12 +269,10 @@ export class GameScene extends Phaser.Scene {
       : (side === 'LOW' ? 0x0D0A2E : 0x2E0A0A)
     const borderWidth = selected ? 3 : 2
     const borderAlpha = selected ? 1 : 0.6
-
     g.fillStyle(fillColor, 1)
     g.lineStyle(borderWidth, borderColor, borderAlpha)
     g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12)
     g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12)
-
     if (selected) {
       g.fillStyle(borderColor, 0.08)
       g.fillRoundedRect(x - w / 2 + 4, y - h / 2 + 4, w - 8, h - 8, 9)
@@ -273,20 +284,8 @@ export class GameScene extends Phaser.Scene {
   private highlightPick(pick: 'HIGH' | 'LOW') {
     const leftX = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
-
     this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, pick === 'LOW', 'LOW')
     this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, pick === 'HIGH', 'HIGH')
-
-    // Re-apply hit areas after redraw (clear() wipes interactivity)
-    this.lowGfx.setInteractive(
-      new Phaser.Geom.Rectangle(leftX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
-      Phaser.Geom.Rectangle.Contains
-    )
-    this.highGfx.setInteractive(
-      new Phaser.Geom.Rectangle(rightX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
-      Phaser.Geom.Rectangle.Contains
-    )
-
     this.lowText.setColor(pick === 'LOW' ? '#4B6EF5' : '#ffffff')
     this.highText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
     this.lowSub.setColor(pick === 'LOW' ? '#ffffff' : '#4B6EF5')
@@ -355,6 +354,19 @@ export class GameScene extends Phaser.Scene {
       return
     }
     this.isPlacing = true
+
+    this.sound.play('click', { volume: 0.5 })
+
+    // Pulse crosshair while waiting for result
+    this.tweens.add({
+      targets: this.crosshairContainer,
+      alpha: 0.3,
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    })
+
     const clientSeed = Math.random().toString(36).substring(2)
     this.bridge.placeBet({
       game: 'SHARP_SHOOTER',
@@ -368,38 +380,87 @@ export class GameScene extends Phaser.Scene {
     const roll = (result.result as { roll: number }).roll
     this.currentBalance = result.newBalance
 
-    let count = 0
-    this.time.addEvent({
-      delay: 75,
-      repeat: 14,
-      callback: () => {
-        this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
-        count++
-        if (count >= 14) {
+    // Stop crosshair pulse
+    this.tweens.killTweensOf(this.crosshairContainer)
+    this.crosshairContainer.setAlpha(1)
+
+    // Accelerating then decelerating roll
+    const delays = [120, 110, 100, 90, 80, 70, 65, 60, 60, 65, 70, 80, 90, 110, 130]
+    let elapsed = 0
+
+    delays.forEach((delay, i) => {
+      this.time.delayedCall(elapsed, () => {
+        if (i < delays.length - 1) {
+          this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
+          this.sound.play(i % 2 === 0 ? 'roll1' : 'roll2', { volume: 0.2 })
+        } else {
+          // Final reveal
           this.numberDisplay.setText(String(roll))
-          if (result.win) {
-            this.numberDisplay.setColor('#00E676')
+
+          // Bullseye flash white then settle
+          this.bullseye.clear()
+          this.bullseye.fillStyle(0xFFFFFF, 1)
+          this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+          this.time.delayedCall(100, () => {
             this.bullseye.clear()
-            this.bullseye.fillStyle(0x00E676, 1)
+            this.bullseye.fillStyle(result.win ? 0x00E676 : 0xFF4444, 1)
             this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-            this.tweens.add({ targets: this.numberDisplay, scale: 1.4, duration: 150, yoyo: true })
+          })
+
+          if (result.win) {
+            this.sound.play('win', { volume: 0.8 })
+            this.numberDisplay.setColor('#00E676')
+            this.tweens.add({
+              targets: this.numberDisplay,
+              scale: 1.4, duration: 150, yoyo: true
+            })
+            // Green spotlight
             this.spotlight.clear()
-            const winColors = [
+            const winLayers = [
               { r: 20,  alpha: 0.30, color: 0x00E676 },
               { r: 60,  alpha: 0.15, color: 0x00E676 },
               { r: 120, alpha: 0.07, color: 0x00E676 },
             ]
-            winColors.forEach(({ r, alpha, color }) => {
+            winLayers.forEach(({ r, alpha, color }) => {
               this.spotlight.fillStyle(color, alpha)
               this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
             })
+            // Ring ripple
+            ;[92, 72, 52, 32].forEach((r, ri) => {
+              const ring = this.add.graphics().setDepth(8)
+              ring.lineStyle(2, 0x00E676, 0.8)
+              ring.strokeCircle(this.dartboardCX, this.dartboardCY, r)
+              this.tweens.add({
+                targets: ring,
+                scaleX: 1.5, scaleY: 1.5,
+                alpha: 0,
+                duration: 600,
+                delay: ri * 80,
+                ease: 'Power2',
+                onComplete: () => ring.destroy()
+              })
+            })
           } else {
+            this.sound.play('loss', { volume: 0.6 })
             this.numberDisplay.setColor('#FF4444')
             this.cameras.main.shake(250, 0.006)
           }
+
+          // Screen flash
+          const flash = this.add.graphics().setDepth(20)
+          flash.fillStyle(result.win ? 0x00E676 : 0xFF3A2D, 0.15)
+          flash.fillRect(0, 0, this.scale.width, this.scale.height)
+          this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 350,
+            onComplete: () => flash.destroy()
+          })
+
           this.showResultOverlay(result)
         }
-      }
+      })
+      elapsed += delay
     })
   }
 
@@ -418,6 +479,7 @@ export class GameScene extends Phaser.Scene {
       .setColor(result.win ? '#FFD700' : '#FF3A2D')
       .setVisible(true)
       .setScale(0.5)
+      .setAlpha(1)
 
     this.tweens.add({
       targets: this.overlayText,
@@ -435,9 +497,10 @@ export class GameScene extends Phaser.Scene {
       targets: this.overlaySubText,
       alpha: 1,
       duration: 400,
-      delay: 200,
+      delay: 250,
     })
 
+    // Particles on win
     if (result.win) {
       for (let i = 0; i < 28; i++) {
         const p = this.add.graphics().setDepth(12)
@@ -474,30 +537,17 @@ export class GameScene extends Phaser.Scene {
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFF3A2D, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
-          this.drawSpotlight(this.dartboardCX, this.dartboardCY, this.scale.width)
+          this.drawSpotlight(this.dartboardCX, this.dartboardCY)
           this.isPlacing = false
           this.currentPick = null
-
           const leftX = this.cx - this.btnGap - this.btnW / 2
           const rightX = this.cx + this.btnGap + this.btnW / 2
           this.drawPickBtn(this.lowGfx, leftX, this.btnY, this.btnW, 64, false, 'LOW')
           this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, 64, false, 'HIGH')
-
-          // Re-apply hit areas after reset redraw
-          this.lowGfx.setInteractive(
-            new Phaser.Geom.Rectangle(leftX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
-            Phaser.Geom.Rectangle.Contains
-          )
-          this.highGfx.setInteractive(
-            new Phaser.Geom.Rectangle(rightX - this.btnW / 2, this.btnY - 32, this.btnW, 64),
-            Phaser.Geom.Rectangle.Contains
-          )
-
           this.lowText.setColor('#ffffff')
           this.highText.setColor('#ffffff')
           this.lowSub.setColor('#4B6EF5')
           this.highSub.setColor('#FF3A2D')
-
           window.parent.postMessage({
             type: 'BET_DONE',
             payload: { newBalance: this.currentBalance }
@@ -517,7 +567,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    // Rotating crosshair
     if (this.crosshairContainer) {
       this.crosshairContainer.rotation += 0.003
     }
@@ -541,7 +590,7 @@ export class GameScene extends Phaser.Scene {
       W * 0.7, H * 0.4
     )
 
-    // Glitch effect on title
+    // Glitch timer
     this.glitchTimer += delta
     if (this.glitchTimer > 3000 + Math.random() * 4000) {
       this.glitchTimer = 0
