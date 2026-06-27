@@ -30,7 +30,6 @@ export class GameScene extends Phaser.Scene {
 
   private spotlight!: Phaser.GameObjects.Graphics
 
-  private titleMain!: Phaser.GameObjects.Text
   private titleGlitch1!: Phaser.GameObjects.Text
   private titleGlitch2!: Phaser.GameObjects.Text
   private glitchTimer: number = 0
@@ -100,7 +99,6 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    // Start background music on first user interaction (browser autoplay policy)
     this.input.once('pointerdown', () => {
       this.startBgMusic()
     })
@@ -200,7 +198,7 @@ export class GameScene extends Phaser.Scene {
     this.titleGlitch2 = this.add.text(cx + 2, y, 'SHARP SHOOTER', {
       ...style, color: '#00F0FF', stroke: '#00F0FF', strokeThickness: 0
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
-    this.titleMain = this.add.text(cx, y, 'SHARP SHOOTER', style)
+    this.add.text(cx, y, 'SHARP SHOOTER', style)
       .setOrigin(0.5).setDepth(2)
   }
 
@@ -357,7 +355,6 @@ export class GameScene extends Phaser.Scene {
 
     this.sound.play('click', { volume: 0.5 })
 
-    // Pulse crosshair while waiting for result
     this.tweens.add({
       targets: this.crosshairContainer,
       alpha: 0.3,
@@ -380,11 +377,9 @@ export class GameScene extends Phaser.Scene {
     const roll = (result.result as { roll: number }).roll
     this.currentBalance = result.newBalance
 
-    // Stop crosshair pulse
     this.tweens.killTweensOf(this.crosshairContainer)
     this.crosshairContainer.setAlpha(1)
 
-    // Accelerating then decelerating roll
     const delays = [120, 110, 100, 90, 80, 70, 65, 60, 60, 65, 70, 80, 90, 110, 130]
     let elapsed = 0
 
@@ -394,10 +389,8 @@ export class GameScene extends Phaser.Scene {
           this.numberDisplay.setText(String(Math.floor(Math.random() * 10) + 1))
           this.sound.play(i % 2 === 0 ? 'roll1' : 'roll2', { volume: 0.2 })
         } else {
-          // Final reveal
           this.numberDisplay.setText(String(roll))
 
-          // Bullseye flash white then settle
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFFFFFF, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
@@ -414,7 +407,6 @@ export class GameScene extends Phaser.Scene {
               targets: this.numberDisplay,
               scale: 1.4, duration: 150, yoyo: true
             })
-            // Green spotlight
             this.spotlight.clear()
             const winLayers = [
               { r: 20,  alpha: 0.30, color: 0x00E676 },
@@ -425,7 +417,6 @@ export class GameScene extends Phaser.Scene {
               this.spotlight.fillStyle(color, alpha)
               this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
             })
-            // Ring ripple
             ;[92, 72, 52, 32].forEach((r, ri) => {
               const ring = this.add.graphics().setDepth(8)
               ring.lineStyle(2, 0x00E676, 0.8)
@@ -446,7 +437,6 @@ export class GameScene extends Phaser.Scene {
             this.cameras.main.shake(250, 0.006)
           }
 
-          // Screen flash
           const flash = this.add.graphics().setDepth(20)
           flash.fillStyle(result.win ? 0x00E676 : 0xFF3A2D, 0.15)
           flash.fillRect(0, 0, this.scale.width, this.scale.height)
@@ -500,7 +490,6 @@ export class GameScene extends Phaser.Scene {
       delay: 250,
     })
 
-    // Particles on win
     if (result.win) {
       for (let i = 0; i < 28; i++) {
         const p = this.add.graphics().setDepth(12)
@@ -571,7 +560,6 @@ export class GameScene extends Phaser.Scene {
       this.crosshairContainer.rotation += 0.003
     }
 
-    // Animated aurora blobs
     this.auroraTime += delta * 0.0004
     const W = this.scale.width
     const H = this.scale.height
@@ -590,7 +578,6 @@ export class GameScene extends Phaser.Scene {
       W * 0.7, H * 0.4
     )
 
-    // Glitch timer
     this.glitchTimer += delta
     if (this.glitchTimer > 3000 + Math.random() * 4000) {
       this.glitchTimer = 0
