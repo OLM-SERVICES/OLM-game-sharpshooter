@@ -189,12 +189,12 @@ export class GameScene extends Phaser.Scene {
       fontStyle: 'bold',
       color: '#FFD700',
       fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5)
+    }).setOrigin(0.5).setDepth(3)
     this.add.text(this.cx, multSubY, 'payout multiplier', {
       fontSize: `${Math.round(9 * ringScale)}px`,
       color: '#555555',
       fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5)
+    }).setOrigin(0.5).setDepth(3)
 
     // Buttons
     this.createPickButtons(W, buttonY, ringScale, btnHeight)
@@ -271,16 +271,16 @@ export class GameScene extends Phaser.Scene {
     const subOffset   = Math.round(btnHeight * 0.22)
 
     // LOW
-    this.lowGfx = this.add.graphics()
+    this.lowGfx = this.add.graphics().setDepth(5)
     this.drawPickBtn(this.lowGfx, leftX, btnY, this.btnW, this.btnH, false, 'LOW')
     this.lowText = this.add.text(leftX, btnY - labelOffset, 'LOW', {
       fontSize: `${labelSize}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5)
+    }).setOrigin(0.5).setDepth(6)
     this.lowSub = this.add.text(leftX, btnY + subOffset, '1 - 5', {
       fontSize: `${subSize}px`, color: '#4B6EF5', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5)
+    }).setOrigin(0.5).setDepth(6)
     this.lowHit = this.add.rectangle(leftX, btnY, this.btnW, this.btnH)
-      .setInteractive({ useHandCursor: true })
+      .setInteractive({ useHandCursor: true }).setDepth(7)
     this.lowHit.on('pointerdown', () => {
       if (this.isPlacing) return
       this.sound.play('select', { volume: 0.5 })
@@ -292,16 +292,16 @@ export class GameScene extends Phaser.Scene {
     })
 
     // HIGH
-    this.highGfx = this.add.graphics()
+    this.highGfx = this.add.graphics().setDepth(5)
     this.drawPickBtn(this.highGfx, rightX, btnY, this.btnW, this.btnH, false, 'HIGH')
     this.highText = this.add.text(rightX, btnY - labelOffset, 'HIGH', {
       fontSize: `${labelSize}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5)
+    }).setOrigin(0.5).setDepth(6)
     this.highSub = this.add.text(rightX, btnY + subOffset, '6 - 10', {
       fontSize: `${subSize}px`, color: '#FF3A2D', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5)
+    }).setOrigin(0.5).setDepth(6)
     this.highHit = this.add.rectangle(rightX, btnY, this.btnW, this.btnH)
-      .setInteractive({ useHandCursor: true })
+      .setInteractive({ useHandCursor: true }).setDepth(7)
     this.highHit.on('pointerdown', () => {
       if (this.isPlacing) return
       this.sound.play('select', { volume: 0.5 })
