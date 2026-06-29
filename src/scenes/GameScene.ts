@@ -14,6 +14,7 @@ export class GameScene extends Phaser.Scene {
   private bullseye!: Phaser.GameObjects.Graphics
   private dartboardCX!: number
   private dartboardCY!: number
+  private bullseyeRadius: number = 15
 
   private lowGfx!: Phaser.GameObjects.Graphics
   private highGfx!: Phaser.GameObjects.Graphics
@@ -36,6 +37,11 @@ export class GameScene extends Phaser.Scene {
 
   private rollSound!: Phaser.Sound.BaseSound
   private btnH: number = 52
+
+  // Current responsive scale factor — 1 = base design size (340px-tall
+  // canvas). Goes above 1 on taller containers (bigger/bolder content),
+  // below 1 on shorter ones, clamped to sane limits in setupUI().
+  private layoutScale: number = 1
 
   public currentPick: 'HIGH' | 'LOW' | null = null
   public currentStake: number = 500
@@ -125,30 +131,34 @@ export class GameScene extends Phaser.Scene {
     this.drawGrid(W, H)
     this.drawDecorativeDots(W, H)
 
-    // ── Fixed pixel layout ────────────────────────────────────────────────
-    // Total content height needed:
-    //   title row:   ~30px  (y=18)
-    //   subtitle:    ~14px  (y=36)
-    //   dartboard:   184px diameter, center at y=140  → bottom at y=232
-    //   gap:          8px
-    //   multiplier:  ~20px  (y=240)
-    //   sub:         ~14px  (y=260)
-    //   gap:         10px
-    //   buttons:      52px  (y=296, bottom=322)
-    // Total: ~322px → fits in 300px canvas with slight scaling
+    // ── Responsive layout ──────────────────────────────────────────────
+    // Base design is tuned for a 340px-tall canvas (content totals
+    // ~326px: title → subtitle → dartboard → multiplier → buttons).
+    // `scale` expresses how much taller/shorter the *actual* container
+    // is than that baseline, and is applied to every font size, ring
+    // radius, and spacing value below — not just Y-positions like
+    // before. That's what makes the scene always fill the space it's
+    // given: bigger/bolder on a tall mobile container, more compact on
+    // a short one, with no leftover empty canvas either way.
+    const BASE_H = 340
+    const MIN_SCALE = 0.85
+    const MAX_SCALE = 1.9
+    const scale = Phaser.Math.Clamp(H / BASE_H, MIN_SCALE, MAX_SCALE)
+    this.layoutScale = scale
 
-    // Scale factor so everything fits in actual canvas height
-    const scale = Math.min(1, H / 340)
+    // Base (unscaled) vertical rhythm — total content height ≈326px
+    const BASE = { title: 18, sub: 36, board: 140, mult: 242, multSub: 260, button: 300, bottom: 326 }
 
-    const titleY    = Math.round(18  * scale)
-    const subY      = Math.round(36  * scale)
-    const boardCY   = Math.round(140 * scale)
-    const multY     = Math.round(242 * scale)
-    const multSubY  = Math.round(260 * scale)
-    const buttonY   = Math.round(300 * scale)
+    // Center the scaled content block in whatever height we actually got
+    const scaledContentH = BASE.bottom * scale
+    const topOffset = Math.max(0, (H - scaledContentH) / 2)
 
-    // Dartboard ring sizes also scaled
-    const ringScale = Math.min(1, scale * 1.1)
+    const titleY    = Math.round(topOffset + BASE.title   * scale)
+    const subY      = Math.round(topOffset + BASE.sub     * scale)
+    const boardCY   = Math.round(topOffset + BASE.board   * scale)
+    const multY     = Math.round(topOffset + BASE.mult    * scale)
+    const multSubY  = Math.round(topOffset + BASE.multSub * scale)
+    const buttonY   = Math.round(topOffset + BASE.button  * scale)
 
     this.dartboardCX = this.cx
     this.dartboardCY = boardCY
@@ -157,25 +167,25 @@ export class GameScene extends Phaser.Scene {
     this.drawSpotlight(this.cx, boardCY)
 
     // Title
-    this.createGlitchTitle(this.cx, titleY)
+    this.createGlitchTitle(this.cx, titleY, scale)
 
     this.add.text(this.cx, subY, 'HIGH OR LOW · HIT THE TARGET', {
-      fontSize: '10px', color: '#00F0FF', fontFamily: 'Arial, sans-serif'
+      fontSize: `${Math.round(10 * scale)}px`, color: '#00F0FF', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
 
     // Dartboard
-    this.createDartboard(this.cx, boardCY, ringScale)
+    this.createDartboard(this.cx, boardCY, scale)
 
     // Multiplier
     this.add.text(this.cx, multY, '1.90×', {
-      fontSize: '16px', fontStyle: 'bold', color: '#FFD700'
+      fontSize: `${Math.round(16 * scale)}px`, fontStyle: 'bold', color: '#FFD700', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
     this.add.text(this.cx, multSubY, 'payout multiplier', {
-      fontSize: '9px', color: '#444444'
+      fontSize: `${Math.round(9 * scale)}px`, color: '#444444', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
 
     // Buttons
-    this.createPickButtons(W, buttonY)
+    this.createPickButtons(W, buttonY, scale)
 
     // Overlay
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
@@ -213,9 +223,10 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  private createGlitchTitle(cx: number, y: number) {
+  private createGlitchTitle(cx: number, y: number, scale: number) {
+    const fontSize = Math.round(18 * scale)
     const style = {
-      fontSize: '18px', fontStyle: 'bold',
+      fontSize: `${fontSize}px`, fontStyle: 'bold',
       fontFamily: 'Arial, sans-serif',
       color: '#ffffff', stroke: '#00F0FF', strokeThickness: 1
     }
@@ -228,8 +239,8 @@ export class GameScene extends Phaser.Scene {
     this.add.text(cx, y, 'SHARP SHOOTER', style).setOrigin(0.5).setDepth(2)
   }
 
-  private createPickButtons(W: number, btnY: number) {
-    this.btnH   = 52
+  private createPickButtons(W: number, btnY: number, scale: number) {
+    this.btnH   = Math.round(52 * scale)
     this.btnW   = Math.floor(W * 0.42)
     this.btnGap = Math.floor(W * 0.04)
     this.btnY   = btnY
@@ -237,14 +248,19 @@ export class GameScene extends Phaser.Scene {
     const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
 
+    const labelSize   = Math.round(16 * scale)
+    const subSize     = Math.round(11 * scale)
+    const labelOffset = Math.round(8  * scale)
+    const subOffset   = Math.round(11 * scale)
+
     // LOW
     this.lowGfx = this.add.graphics()
     this.drawPickBtn(this.lowGfx, leftX, btnY, this.btnW, this.btnH, false, 'LOW')
-    this.lowText = this.add.text(leftX, btnY - 8, 'LOW', {
-      fontSize: '16px', fontStyle: 'bold', color: '#ffffff'
+    this.lowText = this.add.text(leftX, btnY - labelOffset, 'LOW', {
+      fontSize: `${labelSize}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
-    this.lowSub = this.add.text(leftX, btnY + 11, '1 - 5', {
-      fontSize: '11px', color: '#4B6EF5'
+    this.lowSub = this.add.text(leftX, btnY + subOffset, '1 - 5', {
+      fontSize: `${subSize}px`, color: '#4B6EF5', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
     this.lowHit = this.add.rectangle(leftX, btnY, this.btnW, this.btnH)
       .setInteractive({ useHandCursor: true })
@@ -261,11 +277,11 @@ export class GameScene extends Phaser.Scene {
     // HIGH
     this.highGfx = this.add.graphics()
     this.drawPickBtn(this.highGfx, rightX, btnY, this.btnW, this.btnH, false, 'HIGH')
-    this.highText = this.add.text(rightX, btnY - 8, 'HIGH', {
-      fontSize: '16px', fontStyle: 'bold', color: '#ffffff'
+    this.highText = this.add.text(rightX, btnY - labelOffset, 'HIGH', {
+      fontSize: `${labelSize}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
-    this.highSub = this.add.text(rightX, btnY + 11, '6 - 10', {
-      fontSize: '11px', color: '#FF3A2D'
+    this.highSub = this.add.text(rightX, btnY + subOffset, '6 - 10', {
+      fontSize: `${subSize}px`, color: '#FF3A2D', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
     this.highHit = this.add.rectangle(rightX, btnY, this.btnW, this.btnH)
       .setInteractive({ useHandCursor: true })
@@ -286,21 +302,24 @@ export class GameScene extends Phaser.Scene {
     selected: boolean, side: 'LOW' | 'HIGH'
   ) {
     g.clear()
+    const scale = this.layoutScale || 1
+    const corner = Math.round(10 * scale)
     const borderColor = side === 'LOW' ? 0x4B6EF5 : 0xFF3A2D
     const fillColor = selected
       ? (side === 'LOW' ? 0x1a1060 : 0x3d0a0a)
       : (side === 'LOW' ? 0x0D0A2E : 0x2E0A0A)
-    const borderWidth = selected ? 3 : 2
+    const borderWidth = Math.max(1, Math.round((selected ? 3 : 2) * scale))
     const borderAlpha = selected ? 1 : 0.6
     g.fillStyle(fillColor, 1)
     g.lineStyle(borderWidth, borderColor, borderAlpha)
-    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 10)
-    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 10)
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, corner)
+    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, corner)
     if (selected) {
+      const inset = Math.round(4 * scale)
       g.fillStyle(borderColor, 0.08)
-      g.fillRoundedRect(x - w / 2 + 4, y - h / 2 + 4, w - 8, h - 8, 8)
+      g.fillRoundedRect(x - w / 2 + inset, y - h / 2 + inset, w - inset * 2, h - inset * 2, Math.max(0, corner - 2))
       g.lineStyle(1, borderColor, 0.6)
-      g.lineBetween(x - w / 2 + 12, y - h / 2 + 2, x + w / 2 - 12, y - h / 2 + 2)
+      g.lineBetween(x - w / 2 + inset * 3, y - h / 2 + inset / 2, x + w / 2 - inset * 3, y - h / 2 + inset / 2)
     }
   }
 
@@ -364,12 +383,14 @@ export class GameScene extends Phaser.Scene {
     ch.lineBetween(cd, -cd, -cd, cd)
     this.crosshairContainer.add(ch)
 
+    this.bullseyeRadius = Math.round(15 * ringScale)
+
     this.bullseye = this.add.graphics()
     this.bullseye.fillStyle(0xFF3A2D, 1)
-    this.bullseye.fillCircle(cx, cy, Math.round(15 * ringScale))
+    this.bullseye.fillCircle(cx, cy, this.bullseyeRadius)
 
     this.numberDisplay = this.add.text(cx, cy, '?', {
-      fontSize: '30px', fontStyle: 'bold', color: '#ffffff'
+      fontSize: `${Math.round(30 * ringScale)}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setDepth(2)
   }
 
@@ -414,11 +435,11 @@ export class GameScene extends Phaser.Scene {
           this.numberDisplay.setText(String(roll))
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFFFFFF, 1)
-          this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+          this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, this.bullseyeRadius)
           this.time.delayedCall(100, () => {
             this.bullseye.clear()
             this.bullseye.fillStyle(result.win ? 0x00E676 : 0xFF4444, 1)
-            this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+            this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, this.bullseyeRadius)
             if (result.win) {
               this.sound.play('win', { volume: 0.8 })
               this.numberDisplay.setColor('#00E676')
@@ -429,9 +450,10 @@ export class GameScene extends Phaser.Scene {
                 this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
               })
               ;[92, 72, 52, 32].forEach((r, ri) => {
+                const scaledR = Math.round(r * this.layoutScale)
                 const ring = this.add.graphics().setDepth(8)
                 ring.lineStyle(2, 0x00E676, 0.8)
-                ring.strokeCircle(this.dartboardCX, this.dartboardCY, r)
+                ring.strokeCircle(this.dartboardCX, this.dartboardCY, scaledR)
                 this.tweens.add({
                   targets: ring, scaleX: 1.5, scaleY: 1.5, alpha: 0,
                   duration: 600, delay: ri * 80, ease: 'Power2',
@@ -507,7 +529,7 @@ export class GameScene extends Phaser.Scene {
           this.numberDisplay.setText('?').setColor('#ffffff').setScale(1)
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFF3A2D, 1)
-          this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, 15)
+          this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, this.bullseyeRadius)
           this.drawSpotlight(this.dartboardCX, this.dartboardCY)
           this.isPlacing = false
           this.currentPick = null
