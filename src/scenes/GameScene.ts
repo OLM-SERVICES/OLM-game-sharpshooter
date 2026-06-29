@@ -297,7 +297,9 @@ export class GameScene extends Phaser.Scene {
       this.pickStep = 'number'
       this.highlightPick('LOW')
       this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
-      this.showNumberPicker('LOW')
+      window.parent.postMessage(
+        { type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN
+      )
     })
 
     // HIGH
@@ -319,7 +321,9 @@ export class GameScene extends Phaser.Scene {
       this.pickStep = 'number'
       this.highlightPick('HIGH')
       this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
-      this.showNumberPicker('HIGH')
+      window.parent.postMessage(
+        { type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN
+      )
     })
   }
 
