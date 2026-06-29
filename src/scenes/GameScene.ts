@@ -129,40 +129,41 @@ export class GameScene extends Phaser.Scene {
     this.drawDecorativeDots(W, H)
 
     // ── Layout strategy ────────────────────────────────────────────────
-    // We split the canvas into 4 distinct zones so elements never bunch
-    // together regardless of canvas height:
+    // 4 zones, working bottom-up so buttons are guaranteed on-screen:
     //
-    //   Zone A  (top 18%)      — SHARP SHOOTER header
-    //   Zone B  (18% → 68%)    — dartboard, centered in this band
-    //   Zone C  (68% → 80%)    — multiplier label
-    //   Zone D  (bottom 16%)   — LOW / HIGH buttons, pinned near bottom
+    //   Zone D  (bottom)       — LOW / HIGH buttons — fixed pixel height
+    //   Zone C  (above D)      — multiplier label   — fixed pixel height
+    //   Zone B  (remaining middle) — dartboard      — fills what's left
+    //   Zone A  (top)          — header              — fixed pixel height
     //
-    // This means on a short canvas (desktop) everything still spreads
-    // out, and on a tall canvas (mobile) the dartboard grows into its
-    // generous middle zone.
+    // Working bottom-up means no matter how short the canvas is (desktop
+    // iframe), the buttons are always visible.
 
-    // ── Zone A: Header ─────────────────────────────────────────────────
-    const titleY   = Math.round(H * 0.10)
-    const subY     = Math.round(H * 0.17)
+    // Button height: proportion of canvas, clamped
+    const btnHeight = Math.round(Phaser.Math.Clamp(H * 0.115, 44, 66))
 
-    // ── Zone B: Dartboard (centered in middle 50% of height) ───────────
-    const boardTop    = H * 0.20
-    const boardBottom = H * 0.68
+    // ── Zone D: Buttons ────────────────────────────────────────────────
+    // Pin to bottom with 10px margin — never pushed off canvas
+    const buttonY  = Math.min(Math.round(H * 0.88), H - btnHeight / 2 - 10)
+
+    // ── Zone C: Multiplier (just above buttons) ────────────────────────
+    const multSubY = buttonY - btnHeight / 2 - 10
+    const multY    = multSubY - 16
+
+    // ── Zone A: Header (top) ───────────────────────────────────────────
+    const titleY   = Math.round(H * 0.09)
+    const subY     = Math.round(H * 0.16)
+
+    // ── Zone B: Dartboard (centered in remaining space) ────────────────
+    const boardTop    = subY + 12
+    const boardBottom = multY - 14
     const boardCY     = Math.round((boardTop + boardBottom) / 2)
 
-    // Ring scale: fit rings inside zone B with 16px margin each side
-    const availableR  = (boardBottom - boardTop) / 2 - 8
-    // Outer ring in base design = 92px. Scale it to fit the zone,
-    // but don't go below 0.75 or above 1.5
-    const ringScale   = Phaser.Math.Clamp(availableR / 92, 0.75, 1.5)
-    this.layoutScale  = ringScale
-
-    // ── Zone C: Multiplier ─────────────────────────────────────────────
-    const multY    = Math.round(H * 0.71)
-    const multSubY = Math.round(H * 0.77)
-
-    // ── Zone D: Buttons (pinned near bottom, 16% from bottom edge) ─────
-    const buttonY  = Math.round(H * 0.88)
+    // Ring scale: fit outer ring (92px base) into zone B
+    const availableR = (boardBottom - boardTop) / 2 - 4
+    // Tighter cap (1.25 max) — prevents desktop dartboard from overflowing
+    const ringScale  = Phaser.Math.Clamp(availableR / 92, 0.60, 1.25)
+    this.layoutScale = ringScale
 
     this.dartboardCX = this.cx
     this.dartboardCY = boardCY
@@ -195,8 +196,7 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
 
-    // Buttons — height proportional so they don't look tiny on tall screens
-    const btnHeight = Math.round(Phaser.Math.Clamp(H * 0.115, 48, 70))
+    // Buttons
     this.createPickButtons(W, buttonY, ringScale, btnHeight)
 
     // Overlays
