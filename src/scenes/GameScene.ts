@@ -142,12 +142,19 @@ export class GameScene extends Phaser.Scene {
     // a short one, with no leftover empty canvas either way.
     const BASE_H = 340
     const MIN_SCALE = 0.85
-    const MAX_SCALE = 1.9
-    const scale = Phaser.Math.Clamp(H / BASE_H, MIN_SCALE, MAX_SCALE)
-    this.layoutScale = scale
+    const MAX_SCALE = 1.1   // modest breathing room only — not a 2x blow-up
+    let scale = Phaser.Math.Clamp(H / BASE_H, MIN_SCALE, MAX_SCALE)
 
     // Base (unscaled) vertical rhythm — total content height ≈326px
     const BASE = { title: 18, sub: 36, board: 140, mult: 242, multSub: 260, button: 300, bottom: 326 }
+
+    // Safety net: whatever scale we picked above, never let the scaled
+    // content exceed the actual height we were given. This guarantees the
+    // buttons can never be pushed off-canvas, regardless of container size.
+    if (BASE.bottom * scale > H) {
+      scale = H / BASE.bottom
+    }
+    this.layoutScale = scale
 
     // Center the scaled content block in whatever height we actually got
     const scaledContentH = BASE.bottom * scale
