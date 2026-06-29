@@ -129,7 +129,7 @@ export class GameScene extends Phaser.Scene {
     const isMobile = W < 500
 
     this.dartboardCX = this.cx
-    this.dartboardCY = isMobile ? H * 0.33 : H * 0.38
+    this.dartboardCY = isMobile ? H * 0.28 : H * 0.35
 
     this.cameras.main.setBackgroundColor('#05001A')
 
@@ -151,7 +151,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createDartboard(this.cx, this.dartboardCY)
 
-    const multY = isMobile ? this.dartboardCY + 88 : this.dartboardCY + 112
+    const multY = isMobile ? this.dartboardCY + 78 : this.dartboardCY + 100
     this.add.text(this.cx, multY, '1.90×', {
       fontSize: isMobile ? '15px' : '20px', fontStyle: 'bold', color: '#FFD700'
     }).setOrigin(0.5)
