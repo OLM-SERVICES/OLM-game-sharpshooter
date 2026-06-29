@@ -38,9 +38,6 @@ export class GameScene extends Phaser.Scene {
   private rollSound!: Phaser.Sound.BaseSound
   private btnH: number = 52
 
-  // Current responsive scale factor — 1 = base design size (340px-tall
-  // canvas). Goes above 1 on taller containers (bigger/bolder content),
-  // below 1 on shorter ones, clamped to sane limits in setupUI().
   private layoutScale: number = 1
 
   public currentPick: 'HIGH' | 'LOW' | null = null
@@ -96,7 +93,7 @@ export class GameScene extends Phaser.Scene {
       const { type, payload } = event.data || {}
       if (type === 'PLACE_BET') {
         this.currentStake = payload.stake
-        this.currentPick = payload.pick
+        this.currentPick  = payload.pick
         this.highlightPick(payload.pick)
         this.placeBet()
       }
@@ -131,80 +128,90 @@ export class GameScene extends Phaser.Scene {
     this.drawGrid(W, H)
     this.drawDecorativeDots(W, H)
 
-    // ── Responsive layout ──────────────────────────────────────────────
-    // Base design is tuned for a 340px-tall canvas (content totals
-    // ~326px: title → subtitle → dartboard → multiplier → buttons).
-    // `scale` expresses how much taller/shorter the *actual* container
-    // is than that baseline, and is applied to every font size, ring
-    // radius, and spacing value below — not just Y-positions like
-    // before. That's what makes the scene always fill the space it's
-    // given: bigger/bolder on a tall mobile container, more compact on
-    // a short one, with no leftover empty canvas either way.
-    const BASE_H = 340
-    const MIN_SCALE = 0.85
-    const MAX_SCALE = 1.1   // modest breathing room only — not a 2x blow-up
-    let scale = Phaser.Math.Clamp(H / BASE_H, MIN_SCALE, MAX_SCALE)
+    // ── Layout strategy ────────────────────────────────────────────────
+    // We split the canvas into 4 distinct zones so elements never bunch
+    // together regardless of canvas height:
+    //
+    //   Zone A  (top 18%)      — SHARP SHOOTER header
+    //   Zone B  (18% → 68%)    — dartboard, centered in this band
+    //   Zone C  (68% → 80%)    — multiplier label
+    //   Zone D  (bottom 16%)   — LOW / HIGH buttons, pinned near bottom
+    //
+    // This means on a short canvas (desktop) everything still spreads
+    // out, and on a tall canvas (mobile) the dartboard grows into its
+    // generous middle zone.
 
-    // Base (unscaled) vertical rhythm — total content height ≈326px
-    const BASE = { title: 18, sub: 36, board: 140, mult: 242, multSub: 260, button: 300, bottom: 326 }
+    // ── Zone A: Header ─────────────────────────────────────────────────
+    const titleY   = Math.round(H * 0.10)
+    const subY     = Math.round(H * 0.17)
 
-    // Safety net: whatever scale we picked above, never let the scaled
-    // content exceed the actual height we were given. This guarantees the
-    // buttons can never be pushed off-canvas, regardless of container size.
-    if (BASE.bottom * scale > H) {
-      scale = H / BASE.bottom
-    }
-    this.layoutScale = scale
+    // ── Zone B: Dartboard (centered in middle 50% of height) ───────────
+    const boardTop    = H * 0.20
+    const boardBottom = H * 0.68
+    const boardCY     = Math.round((boardTop + boardBottom) / 2)
 
-    // Center the scaled content block in whatever height we actually got
-    const scaledContentH = BASE.bottom * scale
-    const topOffset = Math.max(0, (H - scaledContentH) / 2)
+    // Ring scale: fit rings inside zone B with 16px margin each side
+    const availableR  = (boardBottom - boardTop) / 2 - 8
+    // Outer ring in base design = 92px. Scale it to fit the zone,
+    // but don't go below 0.75 or above 1.5
+    const ringScale   = Phaser.Math.Clamp(availableR / 92, 0.75, 1.5)
+    this.layoutScale  = ringScale
 
-    const titleY    = Math.round(topOffset + BASE.title   * scale)
-    const subY      = Math.round(topOffset + BASE.sub     * scale)
-    const boardCY   = Math.round(topOffset + BASE.board   * scale)
-    const multY     = Math.round(topOffset + BASE.mult    * scale)
-    const multSubY  = Math.round(topOffset + BASE.multSub * scale)
-    const buttonY   = Math.round(topOffset + BASE.button  * scale)
+    // ── Zone C: Multiplier ─────────────────────────────────────────────
+    const multY    = Math.round(H * 0.71)
+    const multSubY = Math.round(H * 0.77)
+
+    // ── Zone D: Buttons (pinned near bottom, 16% from bottom edge) ─────
+    const buttonY  = Math.round(H * 0.88)
 
     this.dartboardCX = this.cx
     this.dartboardCY = boardCY
 
+    // Spotlight behind dartboard
     this.spotlight = this.add.graphics()
-    this.drawSpotlight(this.cx, boardCY)
+    this.drawSpotlight(this.cx, boardCY, ringScale)
 
-    // Title
-    this.createGlitchTitle(this.cx, titleY, scale)
-
+    // Header
+    this.createGlitchTitle(this.cx, titleY, ringScale)
     this.add.text(this.cx, subY, 'HIGH OR LOW · HIT THE TARGET', {
-      fontSize: `${Math.round(10 * scale)}px`, color: '#00F0FF', fontFamily: 'Arial, sans-serif'
+      fontSize: `${Math.round(10 * ringScale)}px`,
+      color: '#00F0FF',
+      fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
 
     // Dartboard
-    this.createDartboard(this.cx, boardCY, scale)
+    this.createDartboard(this.cx, boardCY, ringScale)
 
     // Multiplier
     this.add.text(this.cx, multY, '1.90×', {
-      fontSize: `${Math.round(16 * scale)}px`, fontStyle: 'bold', color: '#FFD700', fontFamily: 'Arial, sans-serif'
+      fontSize: `${Math.round(17 * ringScale)}px`,
+      fontStyle: 'bold',
+      color: '#FFD700',
+      fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
     this.add.text(this.cx, multSubY, 'payout multiplier', {
-      fontSize: `${Math.round(9 * scale)}px`, color: '#444444', fontFamily: 'Arial, sans-serif'
+      fontSize: `${Math.round(9 * ringScale)}px`,
+      color: '#555555',
+      fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5)
 
-    // Buttons
-    this.createPickButtons(W, buttonY, scale)
+    // Buttons — height proportional so they don't look tiny on tall screens
+    const btnHeight = Math.round(Phaser.Math.Clamp(H * 0.115, 48, 70))
+    this.createPickButtons(W, buttonY, ringScale, btnHeight)
 
-    // Overlay
+    // Overlays
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
     this.overlayText = this.add.text(this.cx, H / 2 - 30, '', {
-      fontSize: '48px', fontStyle: 'bold', color: '#FFD700'
+      fontSize: '48px', fontStyle: 'bold', color: '#FFD700', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
-    this.overlaySubText = this.add.text(this.cx, H / 2 + 24, '', {
-      fontSize: '18px', color: '#ffffff'
+    this.overlaySubText = this.add.text(this.cx, H / 2 + 28, '', {
+      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
 
     this.scale.on('resize', () => { this.scene.restart() })
   }
+
+  // ── Helpers ───────────────────────────────────────────────────────────
 
   private drawAurora(W: number, H: number) {
     this.aurora1.clear()
@@ -215,7 +222,7 @@ export class GameScene extends Phaser.Scene {
     this.aurora2.fillEllipse(W * 0.75, H * 0.5, W * 0.7, H * 0.4)
   }
 
-  private drawSpotlight(cx: number, cy: number) {
+  private drawSpotlight(cx: number, cy: number, scale: number = 1) {
     this.spotlight.clear()
     const layers = [
       { r: 20,  alpha: 0.25, color: 0x00F0FF },
@@ -226,16 +233,19 @@ export class GameScene extends Phaser.Scene {
     ]
     layers.forEach(({ r, alpha, color }) => {
       this.spotlight.fillStyle(color, alpha)
-      this.spotlight.fillCircle(cx, cy, r)
+      this.spotlight.fillCircle(cx, cy, Math.round(r * scale))
     })
   }
 
   private createGlitchTitle(cx: number, y: number, scale: number) {
-    const fontSize = Math.round(18 * scale)
+    const fontSize = Math.round(Phaser.Math.Clamp(20 * scale, 16, 26))
     const style = {
-      fontSize: `${fontSize}px`, fontStyle: 'bold',
+      fontSize: `${fontSize}px`,
+      fontStyle: 'bold',
       fontFamily: 'Arial, sans-serif',
-      color: '#ffffff', stroke: '#00F0FF', strokeThickness: 1
+      color: '#ffffff',
+      stroke: '#00F0FF',
+      strokeThickness: 1
     }
     this.titleGlitch1 = this.add.text(cx - 2, y, 'SHARP SHOOTER', {
       ...style, color: '#FF3A2D', stroke: '#FF3A2D', strokeThickness: 0
@@ -246,19 +256,19 @@ export class GameScene extends Phaser.Scene {
     this.add.text(cx, y, 'SHARP SHOOTER', style).setOrigin(0.5).setDepth(2)
   }
 
-  private createPickButtons(W: number, btnY: number, scale: number) {
-    this.btnH   = Math.round(52 * scale)
-    this.btnW   = Math.floor(W * 0.42)
+  private createPickButtons(W: number, btnY: number, scale: number, btnHeight: number) {
+    this.btnH   = btnHeight
+    this.btnW   = Math.floor(Math.min(W * 0.42, 160))
     this.btnGap = Math.floor(W * 0.04)
     this.btnY   = btnY
 
     const leftX  = this.cx - this.btnGap - this.btnW / 2
     const rightX = this.cx + this.btnGap + this.btnW / 2
 
-    const labelSize   = Math.round(16 * scale)
-    const subSize     = Math.round(11 * scale)
-    const labelOffset = Math.round(8  * scale)
-    const subOffset   = Math.round(11 * scale)
+    const labelSize   = Math.round(Phaser.Math.Clamp(16 * scale, 13, 20))
+    const subSize     = Math.round(Phaser.Math.Clamp(11 * scale, 10, 14))
+    const labelOffset = Math.round(btnHeight * 0.18)
+    const subOffset   = Math.round(btnHeight * 0.22)
 
     // LOW
     this.lowGfx = this.add.graphics()
@@ -309,10 +319,10 @@ export class GameScene extends Phaser.Scene {
     selected: boolean, side: 'LOW' | 'HIGH'
   ) {
     g.clear()
-    const scale = this.layoutScale || 1
-    const corner = Math.round(10 * scale)
+    const scale       = this.layoutScale || 1
+    const corner      = Math.round(10 * scale)
     const borderColor = side === 'LOW' ? 0x4B6EF5 : 0xFF3A2D
-    const fillColor = selected
+    const fillColor   = selected
       ? (side === 'LOW' ? 0x1a1060 : 0x3d0a0a)
       : (side === 'LOW' ? 0x0D0A2E : 0x2E0A0A)
     const borderWidth = Math.max(1, Math.round((selected ? 3 : 2) * scale))
@@ -397,7 +407,10 @@ export class GameScene extends Phaser.Scene {
     this.bullseye.fillCircle(cx, cy, this.bullseyeRadius)
 
     this.numberDisplay = this.add.text(cx, cy, '?', {
-      fontSize: `${Math.round(30 * ringScale)}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
+      fontSize: `${Math.round(30 * ringScale)}px`,
+      fontStyle: 'bold',
+      color: '#ffffff',
+      fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setDepth(2)
   }
 
@@ -454,7 +467,7 @@ export class GameScene extends Phaser.Scene {
               this.spotlight.clear()
               ;[{ r: 20, a: 0.30 }, { r: 60, a: 0.15 }, { r: 120, a: 0.07 }].forEach(({ r, a }) => {
                 this.spotlight.fillStyle(0x00E676, a)
-                this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, r)
+                this.spotlight.fillCircle(this.dartboardCX, this.dartboardCY, Math.round(r * this.layoutScale))
               })
               ;[92, 72, 52, 32].forEach((r, ri) => {
                 const scaledR = Math.round(r * this.layoutScale)
@@ -537,7 +550,7 @@ export class GameScene extends Phaser.Scene {
           this.bullseye.clear()
           this.bullseye.fillStyle(0xFF3A2D, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, this.bullseyeRadius)
-          this.drawSpotlight(this.dartboardCX, this.dartboardCY)
+          this.drawSpotlight(this.dartboardCX, this.dartboardCY, this.layoutScale)
           this.isPlacing = false
           this.currentPick = null
           const leftX  = this.cx - this.btnGap - this.btnW / 2
@@ -561,7 +574,8 @@ export class GameScene extends Phaser.Scene {
     const cx = this.scale.width / 2
     const err = this.add.text(cx, 60, message, {
       fontSize: '13px', color: '#ff4444',
-      backgroundColor: '#1a0000', padding: { x: 12, y: 8 }
+      backgroundColor: '#1a0000', padding: { x: 12, y: 8 },
+      fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setDepth(20)
     this.time.delayedCall(3000, () => err.destroy())
   }
