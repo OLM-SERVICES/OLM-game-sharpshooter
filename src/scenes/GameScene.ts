@@ -41,6 +41,13 @@ export class GameScene extends Phaser.Scene {
   private layoutScale: number = 1
 
   public currentPick: 'HIGH' | 'LOW' | null = null
+  public currentExactNumber: number | null = null
+  private pickStep: 'zone' | 'number' = 'zone'
+  private numberPickerContainer!: Phaser.GameObjects.Container
+  private numberPickerBtns: Phaser.GameObjects.Graphics[] = []
+  private numberPickerTexts: Phaser.GameObjects.Text[] = []
+  private numberPickerHits: Phaser.GameObjects.Rectangle[] = []
+  private multiplierDisplay!: Phaser.GameObjects.Text
   public currentStake: number = 500
   public currentBalance: number = 0
 
@@ -92,8 +99,9 @@ export class GameScene extends Phaser.Scene {
       if (this.PARENT_ORIGIN !== '*' && event.origin !== this.PARENT_ORIGIN) return
       const { type, payload } = event.data || {}
       if (type === 'PLACE_BET') {
-        this.currentStake = payload.stake
-        this.currentPick  = payload.pick
+        this.currentStake       = payload.stake
+        this.currentPick        = payload.pick
+        this.currentExactNumber = payload.exactNumber
         this.highlightPick(payload.pick)
         this.placeBet()
       }
@@ -183,8 +191,8 @@ export class GameScene extends Phaser.Scene {
     // Dartboard
     this.createDartboard(this.cx, boardCY, ringScale)
 
-    // Multiplier
-    this.add.text(this.cx, multY, '1.90×', {
+    // Multiplier (stored as ref so we can update it when exact number picked)
+    this.multiplierDisplay = this.add.text(this.cx, multY, '1.90×', {
       fontSize: `${Math.round(17 * ringScale)}px`,
       fontStyle: 'bold',
       color: '#FFD700',
@@ -285,10 +293,11 @@ export class GameScene extends Phaser.Scene {
       if (this.isPlacing) return
       this.sound.play('select', { volume: 0.5 })
       this.currentPick = 'LOW'
+      this.currentExactNumber = null
+      this.pickStep = 'number'
       this.highlightPick('LOW')
-      window.parent.postMessage(
-        { type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN
-      )
+      this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
+      this.showNumberPicker('LOW')
     })
 
     // HIGH
@@ -306,10 +315,11 @@ export class GameScene extends Phaser.Scene {
       if (this.isPlacing) return
       this.sound.play('select', { volume: 0.5 })
       this.currentPick = 'HIGH'
+      this.currentExactNumber = null
+      this.pickStep = 'number'
       this.highlightPick('HIGH')
-      window.parent.postMessage(
-        { type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN
-      )
+      this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
+      this.showNumberPicker('HIGH')
     })
   }
 
@@ -432,7 +442,7 @@ export class GameScene extends Phaser.Scene {
     this.bridge.placeBet({
       game: 'SHARP_SHOOTER',
       stake: this.currentStake,
-      gameParams: { pick: this.currentPick },
+      gameParams: { pick: this.currentPick, exactNumber: this.currentExactNumber },
       clientSeed
     })
   }
@@ -507,8 +517,9 @@ export class GameScene extends Phaser.Scene {
     this.overlay.fillRect(0, 0, W, H)
     this.overlay.setVisible(true)
 
+    const exactHit = (result.result as any).exactHit
     this.overlayText
-      .setText(result.win ? '🎯 WIN!' : 'MISS')
+      .setText(exactHit ? '🎯 BULLSEYE!' : result.win ? '🎯 WIN!' : 'MISS')
       .setColor(result.win ? '#FFD700' : '#FF3A2D')
       .setVisible(true).setScale(0.5).setAlpha(1)
     this.tweens.add({ targets: this.overlayText, scale: 1, duration: 300, ease: 'Back.easeOut' })
@@ -553,6 +564,10 @@ export class GameScene extends Phaser.Scene {
           this.drawSpotlight(this.dartboardCX, this.dartboardCY, this.layoutScale)
           this.isPlacing = false
           this.currentPick = null
+          this.currentExactNumber = null
+          this.pickStep = 'zone'
+          this.hideNumberPicker()
+          this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
           const leftX  = this.cx - this.btnGap - this.btnW / 2
           const rightX = this.cx + this.btnGap + this.btnW / 2
           this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, this.btnH, false, 'LOW')
@@ -620,4 +635,92 @@ export class GameScene extends Phaser.Scene {
       this.titleGlitch2.setAlpha(0)
     })
   }
+
+  // ── Number picker — shown after zone selection ─────────────────────
+  private showNumberPicker(zone: 'LOW' | 'HIGH') {
+    this.hideNumberPicker()
+
+    const W      = this.scale.width
+    const H      = this.scale.height
+    const nums   = zone === 'LOW' ? [1,2,3,4,5] : [6,7,8,9,10]
+    const color  = zone === 'LOW' ? 0x4B6EF5 : 0xFF3A2D
+    const colorH = zone === 'LOW' ? '#4B6EF5' : '#FF3A2D'
+
+    // Position the picker just above the zone buttons
+    const pickerY  = this.btnY - this.btnH / 2 - 14
+    const btnW     = Math.floor(Math.min(W * 0.14, 52))
+    const btnH     = Math.round(btnW * 0.9)
+    const totalW   = btnW * 5 + 8 * 4
+    const startX   = this.cx - totalW / 2 + btnW / 2
+
+    this.numberPickerContainer = this.add.container(0, 0).setDepth(8)
+    this.numberPickerBtns  = []
+    this.numberPickerTexts = []
+    this.numberPickerHits  = []
+
+    // Label above picker
+    const label = this.add.text(this.cx, pickerY - btnH / 2 - 10,
+      'PICK YOUR NUMBER · 2× BONUS ON EXACT MATCH', {
+      fontSize: '9px', color: '#aaaaaa', fontFamily: 'Arial, sans-serif'
+    }).setOrigin(0.5).setDepth(8)
+    this.numberPickerContainer.add(label)
+
+    nums.forEach((num, i) => {
+      const x = startX + i * (btnW + 8)
+
+      const g = this.add.graphics().setDepth(8)
+      g.fillStyle(0x0D0A2E, 1)
+      g.lineStyle(1, color, 0.5)
+      g.fillRoundedRect(x - btnW/2, pickerY - btnH/2, btnW, btnH, 6)
+      g.strokeRoundedRect(x - btnW/2, pickerY - btnH/2, btnW, btnH, 6)
+      this.numberPickerBtns.push(g)
+      this.numberPickerContainer.add(g)
+
+      const t = this.add.text(x, pickerY, String(num), {
+        fontSize: '13px', fontStyle: 'bold', color: '#ffffff',
+        fontFamily: 'Arial, sans-serif'
+      }).setOrigin(0.5).setDepth(9)
+      this.numberPickerTexts.push(t)
+      this.numberPickerContainer.add(t)
+
+      const hit = this.add.rectangle(x, pickerY, btnW, btnH)
+        .setInteractive({ useHandCursor: true }).setDepth(10)
+      this.numberPickerHits.push(hit)
+
+      hit.on('pointerdown', () => {
+        if (this.isPlacing) return
+        this.sound.play('click', { volume: 0.4 })
+        this.currentExactNumber = num
+        // Redraw all buttons — highlight selected
+        nums.forEach((n, j) => {
+          const isSelected = n === num
+          this.numberPickerBtns[j].clear()
+          this.numberPickerBtns[j].fillStyle(isSelected ? color : 0x0D0A2E, 1)
+          this.numberPickerBtns[j].lineStyle(isSelected ? 2 : 1, color, isSelected ? 1 : 0.5)
+          this.numberPickerBtns[j].fillRoundedRect(
+            startX + j*(btnW+8) - btnW/2, pickerY - btnH/2, btnW, btnH, 6)
+          this.numberPickerBtns[j].strokeRoundedRect(
+            startX + j*(btnW+8) - btnW/2, pickerY - btnH/2, btnW, btnH, 6)
+          this.numberPickerTexts[j].setColor(isSelected ? '#ffffff' : '#aaaaaa')
+        })
+        // Update multiplier hint
+        this.multiplierDisplay.setText('3.80× if exact · 1.90× if zone').setColor(colorH)
+        // Notify parent — both zone pick and exact number are now set
+        window.parent.postMessage({
+          type: 'PICK_SELECTED',
+          payload: { pick: this.currentPick, exactNumber: num }
+        }, this.PARENT_ORIGIN)
+      })
+    })
+  }
+
+  private hideNumberPicker() {
+    if (this.numberPickerContainer) {
+      this.numberPickerContainer.destroy(true)
+    }
+    this.numberPickerBtns  = []
+    this.numberPickerTexts = []
+    this.numberPickerHits  = []
+  }
+
 }
