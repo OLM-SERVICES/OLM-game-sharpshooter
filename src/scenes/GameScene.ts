@@ -196,10 +196,6 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setDepth(3)
 
-    // DEBUG: red line at buttonY to confirm position
-    const dbg = this.add.graphics().setDepth(50)
-    dbg.fillStyle(0xff0000, 1)
-    dbg.fillRect(0, buttonY - 2, W, 4)
     // Buttons
     this.createPickButtons(W, buttonY, ringScale, btnHeight)
 
