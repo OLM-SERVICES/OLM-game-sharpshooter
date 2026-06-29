@@ -212,7 +212,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: '18px', color: '#ffffff', fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setVisible(false).setDepth(11)
 
-    this.scale.on('resize', () => { this.scene.restart() })
+    // resize handled by Phaser's built-in scale manager — no restart needed
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
