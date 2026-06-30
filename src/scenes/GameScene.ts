@@ -148,7 +148,7 @@ export class GameScene extends Phaser.Scene {
 
     // ── Zone D: Buttons ────────────────────────────────────────────────
     // Pin to bottom with 10px margin — never pushed off canvas
-    const buttonY  = Math.min(Math.round(H * 0.88), H - btnHeight / 2 - 10)
+    const buttonY  = Math.min(Math.round(H * 0.92), H - btnHeight / 2 - 6)
 
     // ── Zone C: Multiplier (just above buttons) ────────────────────────
     const multSubY = buttonY - btnHeight / 2 - 10
@@ -188,7 +188,7 @@ export class GameScene extends Phaser.Scene {
     this.createDartboard(this.cx, boardCY, ringScale)
 
     // Multiplier (stored as ref so we can update it when exact number picked)
-    this.multiplierDisplay = this.add.text(this.cx, multY, '1.90×', {
+    this.multiplierDisplay = this.add.text(this.cx, multY, '1.80×', {
       fontSize: `${Math.round(17 * ringScale)}px`,
       fontStyle: 'bold',
       color: '#FFD700',
@@ -291,7 +291,7 @@ export class GameScene extends Phaser.Scene {
       this.currentPick = 'LOW'
       this.currentExactNumber = null
       this.highlightPick('LOW')
-      this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
+      this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
       window.parent.postMessage(
         { type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN
       )
@@ -314,7 +314,7 @@ export class GameScene extends Phaser.Scene {
       this.currentPick = 'HIGH'
       this.currentExactNumber = null
       this.highlightPick('HIGH')
-      this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
+      this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
       window.parent.postMessage(
         { type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN
       )
@@ -564,7 +564,7 @@ export class GameScene extends Phaser.Scene {
           this.currentPick = null
           this.currentExactNumber = null
           this.hideNumberPicker()
-          this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
+          this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
           const leftX  = this.cx - this.btnGap - this.btnW / 2
           const rightX = this.cx + this.btnGap + this.btnW / 2
           this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, this.btnH, false, 'LOW')
