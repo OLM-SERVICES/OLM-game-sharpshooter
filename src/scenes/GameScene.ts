@@ -151,16 +151,8 @@ export class GameScene extends Phaser.Scene {
     // Working bottom-up means no matter how short the canvas is (desktop
     // iframe), the buttons are always visible.
 
-    // Button height: proportion of canvas, clamped
-    const btnHeight = Math.round(Phaser.Math.Clamp(H * 0.115, 44, 66))
-
-    // ── Zone D: Buttons ────────────────────────────────────────────────
-    // Pin to bottom with 10px margin — never pushed off canvas
-    const buttonY  = Math.min(Math.round(H * 0.92), H - btnHeight / 2 - 6)
-
-    // ── Zone C: Multiplier (just above buttons) ────────────────────────
-    const multSubY = buttonY - btnHeight / 2 - 10
-    const multY    = multSubY - 16
+   const multY    = Math.round(H * 0.78)
+const multSubY = multY + 18
 
     // ── Zone A: Header (top) ───────────────────────────────────────────
     const titleY   = Math.round(H * 0.09)
@@ -168,7 +160,7 @@ export class GameScene extends Phaser.Scene {
 
     // ── Zone B: Dartboard (centered in remaining space) ────────────────
     const boardTop    = subY + 12
-    const boardBottom = multY - 14
+    const boardBottom = Math.round(H * 0.72)
     const boardCY     = Math.round((boardTop + boardBottom) / 2)
 
     // Ring scale: fit outer ring (92px base) into zone B
@@ -208,8 +200,6 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setDepth(3)
 
-    // Buttons
-    this.createPickButtons(W, buttonY, ringScale, btnHeight)
 
     // Overlays
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
