@@ -1,3 +1,4 @@
+import Phaser from 'phaser'
 import { CasinoBridge } from '../bridge'
 import type { BetResult } from '../bridge'
 
@@ -16,15 +17,6 @@ export class GameScene extends Phaser.Scene {
   private dartboardCY!: number
   private bullseyeRadius: number = 15
 
-  private lowGfx!: Phaser.GameObjects.Graphics
-  private highGfx!: Phaser.GameObjects.Graphics
-  private lowText!: Phaser.GameObjects.Text
-  private highText!: Phaser.GameObjects.Text
-  private lowSub!: Phaser.GameObjects.Text
-  private highSub!: Phaser.GameObjects.Text
-  private lowHit!: Phaser.GameObjects.Rectangle
-  private highHit!: Phaser.GameObjects.Rectangle
-
   private aurora1!: Phaser.GameObjects.Graphics
   private aurora2!: Phaser.GameObjects.Graphics
   private auroraTime: number = 0
@@ -36,7 +28,6 @@ export class GameScene extends Phaser.Scene {
   private glitchTimer: number = 0
 
   private rollSound!: Phaser.Sound.BaseSound
-  private btnH: number = 52
 
   private layoutScale: number = 1
 
@@ -48,9 +39,6 @@ export class GameScene extends Phaser.Scene {
   public currentBalance: number = 0
 
   private PARENT_ORIGIN: string = '*'
-  private btnW: number = 0
-  private btnGap: number = 0
-  private btnY: number = 0
   private cx: number = 0
 
   constructor() {
@@ -73,7 +61,7 @@ export class GameScene extends Phaser.Scene {
 
     this.bridge.onInit((balance: number) => {
       this.isAuthenticated = true
-      this.currentBalance = balance
+      this.currentBalance  = balance
       window.parent.postMessage(
         { type: 'BALANCE_UPDATE', payload: { balance } },
         this.PARENT_ORIGIN
@@ -91,34 +79,37 @@ export class GameScene extends Phaser.Scene {
       window.parent.postMessage({ type: 'BET_DONE', payload: {} }, this.PARENT_ORIGIN)
     })
 
+    // ── Single message listener — handles all incoming messages ────────
     window.addEventListener('message', (event) => {
-  if (this.PARENT_ORIGIN !== '*' && event.origin !== this.PARENT_ORIGIN) return
-  const { type, payload } = event.data || {}
+      if (this.PARENT_ORIGIN !== '*' && event.origin !== this.PARENT_ORIGIN) return
+      const { type, payload } = event.data || {}
 
-  if (type === 'PLACE_BET') {
-    this.currentStake       = payload.stake
-    this.currentPick        = payload.pick
-    this.currentExactNumber = payload.exactNumber
-    this.highlightPick(payload.pick)
-    this.placeBet()
-  }
+      if (type === 'PLACE_BET') {
+        this.currentStake       = payload.stake
+        this.currentPick        = payload.pick
+        this.currentExactNumber = payload.exactNumber ?? null
+        this.placeBet()
+      }
 
-  if (type === 'HIGHLIGHT_PICK') {
-    this.currentPick = payload.pick
-    this.currentExactNumber = null
-    this.highlightPick(payload.pick)
-    this.multiplierDisplay.setText('1.90×').setColor('#FFD700')
-  }
-})
+      if (type === 'HIGHLIGHT_PICK') {
+        this.currentPick        = payload.pick
+        this.currentExactNumber = null
+        this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
+      }
+
+      if (type === 'PLAY_SOUND') {
+        try {
+          this.sound.play(payload.sound, { volume: 0.5 })
+        } catch (_) {}
+      }
+    })
 
     this.time.delayedCall(300, () => {
       const ctx = (this.sound as any).context
       if (ctx) {
-        ctx.resume().then(() => {
-          this.sound.play('bgmusic', { loop: true, volume: 0.12 })
-        }).catch(() => {
-          this.sound.play('bgmusic', { loop: true, volume: 0.12 })
-        })
+        ctx.resume()
+          .then(() => this.sound.play('bgmusic', { loop: true, volume: 0.12 }))
+          .catch(() => this.sound.play('bgmusic', { loop: true, volume: 0.12 }))
       } else {
         this.sound.play('bgmusic', { loop: true, volume: 0.12 })
       }
@@ -140,39 +131,24 @@ export class GameScene extends Phaser.Scene {
     this.drawGrid(W, H)
     this.drawDecorativeDots(W, H)
 
-    // ── Layout strategy ────────────────────────────────────────────────
-    // 4 zones, working bottom-up so buttons are guaranteed on-screen:
-    //
-    //   Zone D  (bottom)       — LOW / HIGH buttons — fixed pixel height
-    //   Zone C  (above D)      — multiplier label   — fixed pixel height
-    //   Zone B  (remaining middle) — dartboard      — fills what's left
-    //   Zone A  (top)          — header              — fixed pixel height
-    //
-    // Working bottom-up means no matter how short the canvas is (desktop
-    // iframe), the buttons are always visible.
+    // ── Layout — no buttons in canvas, more room for dartboard ────────
+    const titleY  = Math.round(H * 0.09)
+    const subY    = Math.round(H * 0.16)
+    const multY   = Math.round(H * 0.78)
+    const multSubY = multY + 18
 
-   const multY    = Math.round(H * 0.78)
-const multSubY = multY + 18
-
-    // ── Zone A: Header (top) ───────────────────────────────────────────
-    const titleY   = Math.round(H * 0.09)
-    const subY     = Math.round(H * 0.16)
-
-    // ── Zone B: Dartboard (centered in remaining space) ────────────────
     const boardTop    = subY + 12
     const boardBottom = Math.round(H * 0.72)
     const boardCY     = Math.round((boardTop + boardBottom) / 2)
 
-    // Ring scale: fit outer ring (92px base) into zone B
     const availableR = (boardBottom - boardTop) / 2 - 4
-    // Tighter cap (1.25 max) — prevents desktop dartboard from overflowing
     const ringScale  = Phaser.Math.Clamp(availableR / 92, 0.60, 1.25)
     this.layoutScale = ringScale
 
     this.dartboardCX = this.cx
     this.dartboardCY = boardCY
 
-    // Spotlight behind dartboard
+    // Spotlight
     this.spotlight = this.add.graphics()
     this.drawSpotlight(this.cx, boardCY, ringScale)
 
@@ -181,36 +157,35 @@ const multSubY = multY + 18
     this.add.text(this.cx, subY, 'HIGH OR LOW · HIT THE TARGET', {
       fontSize: `${Math.round(10 * ringScale)}px`,
       color: '#00F0FF',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5)
 
     // Dartboard
     this.createDartboard(this.cx, boardCY, ringScale)
 
-    // Multiplier (stored as ref so we can update it when exact number picked)
+    // Multiplier display
     this.multiplierDisplay = this.add.text(this.cx, multY, '1.80×', {
       fontSize: `${Math.round(17 * ringScale)}px`,
       fontStyle: 'bold',
       color: '#FFD700',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5).setDepth(3)
+
     this.add.text(this.cx, multSubY, 'payout multiplier', {
       fontSize: `${Math.round(9 * ringScale)}px`,
       color: '#555555',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5).setDepth(3)
-
 
     // Overlays
     this.overlay = this.add.graphics().setVisible(false).setDepth(10)
     this.overlayText = this.add.text(this.cx, H / 2 - 30, '', {
-      fontSize: '48px', fontStyle: 'bold', color: '#FFD700', fontFamily: 'Arial, sans-serif'
+      fontSize: '48px', fontStyle: 'bold',
+      color: '#FFD700', fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5).setVisible(false).setDepth(11)
     this.overlaySubText = this.add.text(this.cx, H / 2 + 28, '', {
-      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial, sans-serif'
+      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5).setVisible(false).setDepth(11)
-
-    // resize handled by Phaser's built-in scale manager — no restart needed
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
@@ -247,114 +222,15 @@ const multSubY = multY + 18
       fontFamily: 'Arial, sans-serif',
       color: '#ffffff',
       stroke: '#00F0FF',
-      strokeThickness: 1
+      strokeThickness: 1,
     }
     this.titleGlitch1 = this.add.text(cx - 2, y, 'SHARP SHOOTER', {
-      ...style, color: '#FF3A2D', stroke: '#FF3A2D', strokeThickness: 0
+      ...style, color: '#FF3A2D', stroke: '#FF3A2D', strokeThickness: 0,
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
     this.titleGlitch2 = this.add.text(cx + 2, y, 'SHARP SHOOTER', {
-      ...style, color: '#00F0FF', stroke: '#00F0FF', strokeThickness: 0
+      ...style, color: '#00F0FF', stroke: '#00F0FF', strokeThickness: 0,
     }).setOrigin(0.5).setAlpha(0).setDepth(1)
     this.add.text(cx, y, 'SHARP SHOOTER', style).setOrigin(0.5).setDepth(2)
-  }
-
-  private createPickButtons(W: number, btnY: number, scale: number, btnHeight: number) {
-    this.btnH   = btnHeight
-    this.btnW   = Math.floor(Math.min(W * 0.42, 160))
-    this.btnGap = Math.floor(W * 0.04)
-    this.btnY   = btnY
-
-    const leftX  = this.cx - this.btnGap - this.btnW / 2
-    const rightX = this.cx + this.btnGap + this.btnW / 2
-
-    const labelSize   = Math.round(Phaser.Math.Clamp(16 * scale, 13, 20))
-    const subSize     = Math.round(Phaser.Math.Clamp(11 * scale, 10, 14))
-    const labelOffset = Math.round(btnHeight * 0.18)
-    const subOffset   = Math.round(btnHeight * 0.22)
-
-    // LOW
-    this.lowGfx = this.add.graphics().setDepth(5)
-    this.drawPickBtn(this.lowGfx, leftX, btnY, this.btnW, this.btnH, false, 'LOW')
-    this.lowText = this.add.text(leftX, btnY - labelOffset, 'LOW', {
-      fontSize: `${labelSize}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5).setDepth(6)
-    this.lowSub = this.add.text(leftX, btnY + subOffset, '1 - 5', {
-      fontSize: `${subSize}px`, color: '#4B6EF5', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5).setDepth(6)
-    this.lowHit = this.add.rectangle(leftX, btnY, this.btnW, this.btnH)
-      .setInteractive({ useHandCursor: true }).setDepth(7)
-    this.lowHit.on('pointerdown', () => {
-      if (this.isPlacing) return
-      this.sound.play('select', { volume: 0.5 })
-      this.currentPick = 'LOW'
-      this.currentExactNumber = null
-      this.highlightPick('LOW')
-      this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
-      window.parent.postMessage(
-        { type: 'PICK_SELECTED', payload: { pick: 'LOW' } }, this.PARENT_ORIGIN
-      )
-    })
-
-    // HIGH
-    this.highGfx = this.add.graphics().setDepth(5)
-    this.drawPickBtn(this.highGfx, rightX, btnY, this.btnW, this.btnH, false, 'HIGH')
-    this.highText = this.add.text(rightX, btnY - labelOffset, 'HIGH', {
-      fontSize: `${labelSize}px`, fontStyle: 'bold', color: '#ffffff', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5).setDepth(6)
-    this.highSub = this.add.text(rightX, btnY + subOffset, '6 - 10', {
-      fontSize: `${subSize}px`, color: '#FF3A2D', fontFamily: 'Arial, sans-serif'
-    }).setOrigin(0.5).setDepth(6)
-    this.highHit = this.add.rectangle(rightX, btnY, this.btnW, this.btnH)
-      .setInteractive({ useHandCursor: true }).setDepth(7)
-    this.highHit.on('pointerdown', () => {
-      if (this.isPlacing) return
-      this.sound.play('select', { volume: 0.5 })
-      this.currentPick = 'HIGH'
-      this.currentExactNumber = null
-      this.highlightPick('HIGH')
-      this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
-      window.parent.postMessage(
-        { type: 'PICK_SELECTED', payload: { pick: 'HIGH' } }, this.PARENT_ORIGIN
-      )
-    })
-  }
-
-  private drawPickBtn(
-    g: Phaser.GameObjects.Graphics,
-    x: number, y: number, w: number, h: number,
-    selected: boolean, side: 'LOW' | 'HIGH'
-  ) {
-    g.clear()
-    const scale       = this.layoutScale || 1
-    const corner      = Math.round(10 * scale)
-    const borderColor = side === 'LOW' ? 0x4B6EF5 : 0xFF3A2D
-    const fillColor   = selected
-      ? (side === 'LOW' ? 0x1a1060 : 0x3d0a0a)
-      : (side === 'LOW' ? 0x0D0A2E : 0x2E0A0A)
-    const borderWidth = Math.max(1, Math.round((selected ? 3 : 2) * scale))
-    const borderAlpha = selected ? 1 : 0.6
-    g.fillStyle(fillColor, 1)
-    g.lineStyle(borderWidth, borderColor, borderAlpha)
-    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, corner)
-    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, corner)
-    if (selected) {
-      const inset = Math.round(4 * scale)
-      g.fillStyle(borderColor, 0.08)
-      g.fillRoundedRect(x - w / 2 + inset, y - h / 2 + inset, w - inset * 2, h - inset * 2, Math.max(0, corner - 2))
-      g.lineStyle(1, borderColor, 0.6)
-      g.lineBetween(x - w / 2 + inset * 3, y - h / 2 + inset / 2, x + w / 2 - inset * 3, y - h / 2 + inset / 2)
-    }
-  }
-
-  private highlightPick(pick: 'HIGH' | 'LOW') {
-    const leftX  = this.cx - this.btnGap - this.btnW / 2
-    const rightX = this.cx + this.btnGap + this.btnW / 2
-    this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, this.btnH, pick === 'LOW',  'LOW')
-    this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, this.btnH, pick === 'HIGH', 'HIGH')
-    this.lowText.setColor(pick === 'LOW'   ? '#4B6EF5' : '#ffffff')
-    this.highText.setColor(pick === 'HIGH' ? '#FF3A2D' : '#ffffff')
-    this.lowSub.setColor(pick === 'LOW'    ? '#ffffff' : '#4B6EF5')
-    this.highSub.setColor(pick === 'HIGH'  ? '#ffffff' : '#FF3A2D')
   }
 
   private drawGrid(W: number, H: number) {
@@ -368,10 +244,10 @@ const multSubY = multY + 18
   private drawDecorativeDots(W: number, H: number) {
     const dots = this.add.graphics()
     const positions = [
-      { x: 24, y: 24 }, { x: W - 24, y: 24 },
-      { x: 24, y: H - 24 }, { x: W - 24, y: H - 24 },
-      { x: W / 2, y: 24 }, { x: W / 2, y: H - 24 },
-      { x: 24, y: H / 2 }, { x: W - 24, y: H / 2 }
+      { x: 24, y: 24 },       { x: W - 24, y: 24 },
+      { x: 24, y: H - 24 },   { x: W - 24, y: H - 24 },
+      { x: W / 2, y: 24 },    { x: W / 2, y: H - 24 },
+      { x: 24, y: H / 2 },    { x: W - 24, y: H / 2 },
     ]
     positions.forEach((pos, i) => {
       dots.fillStyle(i % 2 === 0 ? 0x00F0FF : 0xFFD700, 0.8)
@@ -407,7 +283,6 @@ const multSubY = multY + 18
     this.crosshairContainer.add(ch)
 
     this.bullseyeRadius = Math.round(15 * ringScale)
-
     this.bullseye = this.add.graphics()
     this.bullseye.fillStyle(0xFF3A2D, 1)
     this.bullseye.fillCircle(cx, cy, this.bullseyeRadius)
@@ -416,7 +291,7 @@ const multSubY = multY + 18
       fontSize: `${Math.round(30 * ringScale)}px`,
       fontStyle: 'bold',
       color: '#ffffff',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5).setDepth(2)
   }
 
@@ -432,14 +307,14 @@ const multSubY = multY + 18
     this.rollSound.play({ volume: 0.3, loop: false })
     this.tweens.add({
       targets: this.crosshairContainer,
-      alpha: 0.3, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+      alpha: 0.3, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
     })
     const clientSeed = Math.random().toString(36).substring(2)
     this.bridge.placeBet({
       game: 'SHARP_SHOOTER',
       stake: this.currentStake,
       gameParams: { pick: this.currentPick, exactNumber: this.currentExactNumber },
-      clientSeed
+      clientSeed,
     })
   }
 
@@ -483,7 +358,7 @@ const multSubY = multY + 18
                 this.tweens.add({
                   targets: ring, scaleX: 1.5, scaleY: 1.5, alpha: 0,
                   duration: 600, delay: ri * 80, ease: 'Power2',
-                  onComplete: () => ring.destroy()
+                  onComplete: () => ring.destroy(),
                 })
               })
             } else {
@@ -540,7 +415,7 @@ const multSubY = multY + 18
           y: this.dartboardCY + Math.sin(angle) * dist,
           alpha: 0, scale: 0.2,
           duration: 800 + Math.random() * 500, ease: 'Power2',
-          onComplete: () => p.destroy()
+          onComplete: () => p.destroy(),
         })
       }
     }
@@ -558,22 +433,14 @@ const multSubY = multY + 18
           this.bullseye.fillStyle(0xFF3A2D, 1)
           this.bullseye.fillCircle(this.dartboardCX, this.dartboardCY, this.bullseyeRadius)
           this.drawSpotlight(this.dartboardCX, this.dartboardCY, this.layoutScale)
-          this.isPlacing = false
-          this.currentPick = null
+          this.isPlacing        = false
+          this.currentPick      = null
           this.currentExactNumber = null
           this.hideNumberPicker()
           this.multiplierDisplay.setText('1.80×').setColor('#FFD700')
-          const leftX  = this.cx - this.btnGap - this.btnW / 2
-          const rightX = this.cx + this.btnGap + this.btnW / 2
-          this.drawPickBtn(this.lowGfx,  leftX,  this.btnY, this.btnW, this.btnH, false, 'LOW')
-          this.drawPickBtn(this.highGfx, rightX, this.btnY, this.btnW, this.btnH, false, 'HIGH')
-          this.lowText.setColor('#ffffff')
-          this.highText.setColor('#ffffff')
-          this.lowSub.setColor('#4B6EF5')
-          this.highSub.setColor('#FF3A2D')
           window.parent.postMessage({
             type: 'BET_DONE',
-            payload: { newBalance: this.currentBalance }
+            payload: { newBalance: this.currentBalance },
           }, this.PARENT_ORIGIN)
         }
       })
@@ -581,11 +448,10 @@ const multSubY = multY + 18
   }
 
   private showError(message: string) {
-    const cx = this.scale.width / 2
-    const err = this.add.text(cx, 60, message, {
+    const err = this.add.text(this.scale.width / 2, 60, message, {
       fontSize: '13px', color: '#ff4444',
       backgroundColor: '#1a0000', padding: { x: 12, y: 8 },
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
     }).setOrigin(0.5).setDepth(20)
     this.time.delayedCall(3000, () => err.destroy())
   }
@@ -636,5 +502,4 @@ const multSubY = multY + 18
       this.numberPickerContainer.destroy(true)
     }
   }
-
 }
